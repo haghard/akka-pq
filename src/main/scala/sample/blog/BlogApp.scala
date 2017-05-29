@@ -43,6 +43,7 @@ object BlogApp {
   }
 
   def startup(ports: Seq[String]): Unit = {
+
     ports foreach { port =>
       // Override the configuration of the port
       val config = ConfigFactory.parseString("akka.remote.netty.tcp.port=" + port).
@@ -57,6 +58,9 @@ object BlogApp {
       // Create an Akka system
       implicit val system = ActorSystem("ClusterSystem", config)
 
+      //val cassandraMetricsRegistry = CassandraMetricsRegistry.get(system)
+      //cassandraMetricsRegistry.getRegistry.getHistograms
+
       implicit val m = akka.stream.ActorMaterializer(ActorMaterializerSettings(system)
         .withDispatcher("cassandra-dispatcher")
         .withInputBuffer(pageSize, pageSize))
@@ -64,36 +68,49 @@ object BlogApp {
       implicit val e = m.executionContext
 
       /*
-      case class Record(persistence_id: String, partition_nr: Long, sequence_nr: Long,
-        timestamp: UUID, timebucket: String, event: Array[Byte])
 
-      val host = new util.ArrayList[InetSocketAddress]()
-      host.add(new InetSocketAddress("78.155.219.224", 9042))
+            val journal = PersistenceQuery(system).readJournalFor[CassandraReadJournal](CassandraReadJournal.Identifier)
 
-      val cluster = com.datastax.driver.core.Cluster.builder
-        .addContactPointsWithPorts(host)
-        .build
+            val flow =
+              journal.currentEventsByPersistenceId("", 0, Int.MaxValue)
+                .toMat(Sink.foreach { _ =>
+                  println("")
+                })(Keep.right)
 
-      val session = cluster.connect(ks)
-      val c = new AtomicInteger()
+            val f: Future[Done] = flow.run()
+      */
 
-      val f = PsJournal[Record](session, table, Roland, 0, system.log, partitionSize, pageSize)
-        .log("Roland-ps")(system.log)
-        .toMat(Sink.foreach { r =>
-          c.incrementAndGet
-          r.foreach { obj =>
-            println(obj.event.length)
-          }
-        })(Keep.right)
+      /*
+         case class Record(persistence_id: String, partition_nr: Long, sequence_nr: Long,
+           timestamp: UUID, timebucket: String, event: Array[Byte])
 
-      f.run().onComplete { _ =>
-        println("*************** Count: " + c.get)
-        session.close
-        cluster.close
-        Await.result(system.terminate(), Duration.Inf)
-        System.exit(0)
-      }
-*/
+         val host = new util.ArrayList[InetSocketAddress]()
+         host.add(new InetSocketAddress("78.155.219.224", 9042))
+
+         val cluster = com.datastax.driver.core.Cluster.builder
+           .addContactPointsWithPorts(host)
+           .build
+
+         val session = cluster.connect(ks)
+         val c = new AtomicInteger()
+
+         val f = PsJournal[Record](session, table, Roland, 0, system.log, partitionSize, pageSize)
+           .log("Roland-ps")(system.log)
+           .toMat(Sink.foreach { r =>
+             c.incrementAndGet
+             r.foreach { obj =>
+               println(obj.event.length)
+             }
+           })(Keep.right)
+
+         f.run().onComplete { _ =>
+           println("*************** Count: " + c.get)
+           session.close
+           cluster.close
+           Await.result(system.terminate(), Duration.Inf)
+           System.exit(0)
+         }
+   */
       /*startupSharedJournal(system, startStore = (port == "2551"), path =
         ActorPath.fromString("akka.tcp://ClusterSystem@127.0.0.1:2551/user/store"))
       */

@@ -13,6 +13,7 @@ import com.google.common.util.concurrent.{FutureCallback, Futures, ListenableFut
 import scala.concurrent.{Future, Promise}
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
+import akka.persistence.cassandra._
 
 /*
 Links:
@@ -41,7 +42,7 @@ A few simple guarantees.
  * Taken from https://github.com/akka/alpakka/blob/master/cassandra/src/main/scala/akka/stream/alpakka/cassandra/CassandraSourceStage.scala
  * and adapted with respect to akka-cassandra-persistence schema
  */
-final class PsJournal(session: Session, journal: String, persistenceId: String,
+final class PsJournal(session0: Session, journal: String, persistenceId: String,
   offset: Long, partitionSize: Long, log: LoggingAdapter, pageSize: Int) extends GraphStage[SourceShape[Row]] {
   val out: Outlet[Row] = Outlet[Row](akka.event.Logging.simpleName(this) + ".out")
 
@@ -78,7 +79,7 @@ final class PsJournal(session: Session, journal: String, persistenceId: String,
       var sequenceNr = offset
       var partitionIter = Option.empty[ResultSet]
       var onMessageCallback: AsyncCallback[Try[ResultSet]] = _
-      val preparedStmt = session.prepare(queryByPersistenceId)
+      val preparedStmt = session0.prepare(queryByPersistenceId)
 
       override def preStart(): Unit = {
         implicit val _ = materializer.executionContext
@@ -88,7 +89,7 @@ final class PsJournal(session: Session, journal: String, persistenceId: String,
         //val srcName = inheritedAttributes.get(Attributes.Name(persistenceId))
         //log.info("{} Start query: {}\npartition:{} sequenceNr:{}", srcName, queryByPersistenceId, partition, sequenceNr)
         val stmt = new BoundStatement(preparedStmt).bind(persistenceId, partition, sequenceNr: JLong).setFetchSize(pageSize)
-        guavaToScala(session.executeAsync(stmt)).onComplete(onMessageCallback.invoke)
+        session0.executeAsync(stmt).asScala.onComplete(onMessageCallback.invoke)
       }
 
       setHandler(
@@ -106,12 +107,12 @@ final class PsJournal(session: Session, journal: String, persistenceId: String,
                   val nextPartition = navigatePartition(sequenceNr, partitionSize): JLong
                   //log.info("Query: {}\npartition:{}  sequenceNr:{}", queryByPersistenceId, nextPartition, sequenceNr)
                   val stmt = new BoundStatement(preparedStmt).bind(persistenceId, nextPartition, sequenceNr: JLong).setFetchSize(pageSize)
-                  guavaToScala(session.executeAsync(stmt)).onComplete(onMessageCallback.invoke)
+                  session0.executeAsync(stmt).asScala.onComplete(onMessageCallback.invoke)
                 } else {
                   //Your page size less than akka-cassandra-persistence partition size(cassandra-journal.target-partition-size)
                   //End of page but still have something to read in from the current partition,
                   log.info("Still have something to read in current partition seqNum: {}", sequenceNr)
-                  guavaToScala(iter.fetchMoreResults).onComplete(onMessageCallback.invoke)
+                  iter.fetchMoreResults.asScala.onComplete(onMessageCallback.invoke)
                 }
               case None ⇒
                 log.info("A request from a downstream had arrived before we read the first row")
@@ -146,7 +147,7 @@ final class PsJournal(session: Session, journal: String, persistenceId: String,
       }
     }
 
-  private def guavaToScala[A](guavaFuture: ListenableFuture[A]): Future[A] = {
+  /*private def guavaToScala[A](guavaFuture: ListenableFuture[A]): Future[A] = {
     val p = Promise[A]()
     Futures.addCallback(
       guavaFuture,
@@ -156,7 +157,7 @@ final class PsJournal(session: Session, journal: String, persistenceId: String,
       }
     )
     p.future
-  }
+  }*/
 }
 
 object PsJournal {
@@ -175,10 +176,3 @@ object PsJournal {
         row.as[T]
       }
 }
-
-/*
-.map { row =>
-  val bts = row.getBytes("event").array()
-  row.as[T]
-}
-*/

@@ -1,6 +1,5 @@
 package sample
 
-
 import java.util.UUID
 
 import com.datastax.driver.core.Row
@@ -9,14 +8,7 @@ import shapeless._
 import scala.reflect.ClassTag
 import scala.util.Try
 
-
 package object blog {
-  /*
-  import cats.data._
-  import cats.implicits._
-  import cats.data.Validated.{Invalid, Valid}
-  type ValidatedRow[T] = cats.data.ValidatedNel[String, T]
-  */
 
   trait Reader[A] {
     def apply(row: Row, fields: Vector[String], ind: Int): Option[A]
@@ -96,10 +88,3 @@ package object blog {
     }
   }
 }
-
-/*
-import cats.implicits._
-val validation = cats.Apply[cats.data.Validated[String, ?]].map2(
-  validateTeam(team), validatePeriod(period)
-) { case (_, _) => PlayerStatsQueryArgs(sparkContext, url, name, period, team) }
-*/
