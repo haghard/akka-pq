@@ -17,7 +17,7 @@ val project = Project(
       "com.typesafe.akka" %%  "akka-stream"    % akkaVersion,
       "org.hdrhistogram"  %   "HdrHistogram"      % "2.1.9",
       "com.chuusai"       %%  "shapeless"         %  "2.3.2",
-      //"org.typelevel"     %%  "cats"              %  "0.9.0",
+      "org.typelevel"     %%  "cats"              %  "0.9.0",
       "com.typesafe.akka" %%  "akka-multi-node-testkit" % akkaVersion,
       //"org.iq80.leveldb" % "leveldb" % "0.7",
       //"org.fusesource.leveldbjni" % "leveldbjni-all" % "1.8",

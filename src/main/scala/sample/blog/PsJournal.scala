@@ -3,17 +3,14 @@ package sample.blog
 import java.lang.{Long => JLong}
 
 import akka.event.LoggingAdapter
+import akka.persistence.cassandra._
 import akka.stream.scaladsl.Source
 import akka.stream.stage.{AsyncCallback, GraphStage, GraphStageLogic, OutHandler}
-import akka.stream.{ActorAttributes, Attributes, Outlet, SourceShape}
+import akka.stream.{Attributes, Outlet, SourceShape}
 import com.datastax.driver.core._
-import com.datastax.driver.core.utils.UUIDs
-import com.google.common.util.concurrent.{FutureCallback, Futures, ListenableFuture}
 
-import scala.concurrent.{Future, Promise}
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
-import akka.persistence.cassandra._
 
 /*
 Links:
@@ -61,9 +58,14 @@ final class PsJournal(session0: Session, journal: String, persistenceId: String,
   */
   override protected def initialAttributes: Attributes =
     Attributes.name(persistenceId)
-      //.and(ActorAttributes.dispatcher("cassandra-dispatcher"))
+
+  //.and(ActorAttributes.dispatcher("cassandra-dispatcher"))
 
   private def navigatePartition(sequenceNr: Long, partitionSize: Long): Long = sequenceNr / partitionSize
+
+  private def statement(preparedStmt: PreparedStatement, persistenceId: String,
+    partition: JLong, sequenceNr: JLong, pageSize: Int) =
+    new BoundStatement(preparedStmt).bind(persistenceId, partition, sequenceNr).setFetchSize(pageSize)
 
   override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
     new GraphStageLogic(shape) {
@@ -88,7 +90,7 @@ final class PsJournal(session0: Session, journal: String, persistenceId: String,
 
         //val srcName = inheritedAttributes.get(Attributes.Name(persistenceId))
         //log.info("{} Start query: {}\npartition:{} sequenceNr:{}", srcName, queryByPersistenceId, partition, sequenceNr)
-        val stmt = new BoundStatement(preparedStmt).bind(persistenceId, partition, sequenceNr: JLong).setFetchSize(pageSize)
+        val stmt = statement(preparedStmt, persistenceId, partition, sequenceNr, pageSize)
         session0.executeAsync(stmt).asScala.onComplete(onMessageCallback.invoke)
       }
 
@@ -106,7 +108,7 @@ final class PsJournal(session0: Session, journal: String, persistenceId: String,
                   //a current partition is exhausted, let's try to read from the next partition
                   val nextPartition = navigatePartition(sequenceNr, partitionSize): JLong
                   //log.info("Query: {}\npartition:{}  sequenceNr:{}", queryByPersistenceId, nextPartition, sequenceNr)
-                  val stmt = new BoundStatement(preparedStmt).bind(persistenceId, nextPartition, sequenceNr: JLong).setFetchSize(pageSize)
+                  val stmt = statement(preparedStmt, persistenceId, nextPartition, sequenceNr, pageSize)
                   session0.executeAsync(stmt).asScala.onComplete(onMessageCallback.invoke)
                 } else {
                   //Your page size less than akka-cassandra-persistence partition size(cassandra-journal.target-partition-size)
@@ -140,7 +142,7 @@ final class PsJournal(session0: Session, journal: String, persistenceId: String,
 
           case Failure(failure) ⇒ failStage(failure)
         }
-    }
+      }
 
       override def postStop = {
         //cleaning up resources should be done here
@@ -165,7 +167,7 @@ object PsJournal {
    *
    *
    */
-  def apply[T: Reader: ClassTag](session: Session, journal: String, persistenceId: String,
+  def apply[T: Reader : ClassTag](session: Session, journal: String, persistenceId: String,
     offset: Long,
     log: LoggingAdapter,
     partitionSize: Long, pageSize: Int = 128

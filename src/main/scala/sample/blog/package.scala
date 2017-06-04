@@ -66,6 +66,17 @@ package object blog {
       if (fields.size >= ind) Some(HNil) else None
   }
 
+  //https://docs.google.com/presentation/d/1AoVhMvawgXF3hxXL5omo_EPfvoO6t81cIQaautrpsFA/edit#slide=id.p
+  /*
+  implicit def inductionStep[H, T](implicit f: Reader[H], s: Reader[T]): Reader[H :: T] =
+    (row: Row, fields: Vector[String], acc: Int) => {
+      new Reader[H :: T] {
+        implicitly[Reader[H]].apply(row, fields, acc) :: implicitly[Reader[T]].apply(row, fields, acc + 1)
+      }
+    }
+*/
+
+  //induction
   implicit def hlistParserCassandra[H: Reader, T <: HList : Reader]: Reader[H :: T] =
     (row: Row, fields: Vector[String], acc: Int) => {
       fields match {
@@ -87,4 +98,15 @@ package object blog {
       parser(row, fields, 0)
     }
   }
+
+
+
+  // Named induction step: (E, Tail)
+  /*
+    implicit def inductionStepNamed[E, Tail](implicit h: Reader[E], tail: Reader[Tail]) = new Reader[(E,Tail)] {
+      h.apply()
+      val name: String = s"${n.name}, ${tail.name}"
+    }
+  */
+
 }
