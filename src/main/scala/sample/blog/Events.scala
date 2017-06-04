@@ -9,6 +9,9 @@ object Events {
   //https://t.co/gKsnOpK2kk
   //https://gist.github.com/aaronlevin/d3911ba50d8f5253c85d2c726c63947b
 
+
+  //Heterogeneous Event Sink
+
   sealed trait Command {
     def id: Long
   }
@@ -22,11 +25,9 @@ object Events {
   type CNil = Unit
   type OrderProtocol = (OrderCreated, (OrderUpdated, (OrderSubmitted, CNil)))
 
-
   trait ParsedCmd[E] {
-    val name: String
+    def name: String
   }
-
 
   // instances of Named for our events
   implicit val create = new ParsedCmd[OrderCreated] {
@@ -40,20 +41,21 @@ object Events {
   }
 
   implicit val baseCaseNamed = new ParsedCmd[CNil] {
-    override val name: String = ""
+    override val name: String = "eof"
   }
 
+  //We leverage implicit resolution to do typeclass induction
 
   // Named induction step: (E, Tail)
-  implicit def inductionStepNamed[E, Tail](implicit n: ParsedCmd[E], tailNames: ParsedCmd[Tail]) =
+  implicit def inductionStep[E, Tail](implicit n: ParsedCmd[E], tailNames: ParsedCmd[Tail]) =
     new ParsedCmd[(E, Tail)] {
       override val name = s"${n.name}, ${tailNames.name}"
     }
 
   // helper
-  def getNamed[E](implicit names: ParsedCmd[E]): String =
+  def getNamed[E](implicit names: ParsedCmd[E]): String = {
     names.name
-
+  }
 
   // A Typeclass for dynamic-dispatch on events
   trait EventHandler[Events] {
@@ -61,13 +63,12 @@ object Events {
     def handleEvent(eventName: String, payload: String): Either[String, Out]
   }
 
-
   // HandleEvents: base case
   implicit val baseCaseHandleEvents = new EventHandler[CNil] {
     type Out = Nothing
-
-    def handleEvent(eventName: String, payload: String) = Left(s"Did not find event $eventName")
+    def handleEvent(eventName: String, payload: String) = Left(s"Did not find an event $eventName")
   }
+
 
   // A typeclass for types that can be parsed from strings.
   trait Parser[E] {
@@ -127,6 +128,7 @@ object Events {
       type Out = Either[handler.Out, E]
 
       override def handleEvent(eventName: String, line: String): Either[String, Out] = {
+        println("Handle's induction step: " + eventName)
         if (eventName == namedEvent.name) {
           parser.fromString(line) match {
             case None => Left(s"""Could not decode event "$eventName" with payload "$line"""")
@@ -141,9 +143,9 @@ object Events {
       }
     }
 
-  def handleEvent[Events](eventName: String, payload: String)(implicit names: EventHandler[Events]): Either[String, names.Out] =
-    names.handleEvent(eventName, payload)
-
+  def handleEvent[Events](eventName: String, payload: String)
+      (implicit names: EventHandler[Events]): Either[String, names.Out] =
+        names.handleEvent(eventName, payload)
 
   println(s"Protocol events ${getNamed[OrderProtocol]}")
 
@@ -156,12 +158,5 @@ object Events {
   handleEvent[OrderProtocol]("submit", "1\thaghard\t999\t3457345683563")
   //Right(Left(Left(Right(OrderSubmitted(1,haghard,999,3457345683563)))))
 
-  val r = handleEvent[OrderProtocol]("create2", "1\thaghard")
-
-  r.fold({ a: String => 9l }, { a =>
-    a
-  })
-  
-  //r.fold(9l, { a => a.fold(8l, { b => b.id }) }))
-
+  handleEvent[OrderProtocol]("create2", "1\thaghard")
 }

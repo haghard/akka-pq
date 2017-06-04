@@ -80,7 +80,6 @@ object Invariants {
     def apply[T <: Precondition[_, _] : ClassTag, F[_] : cats.Applicative] = {
       new Invariant[F] {
         val A: cats.Applicative[F] = implicitly[cats.Applicative[F]]
-
         override def isPreservedOnState[T, State](in: F[T], state: State)
           (implicit P: Precondition[T, State], C: Catamorphism[F]): Either[String, F[Unit]] = {
           println(P.name)
@@ -99,21 +98,15 @@ object Invariants {
       for {
         _ <- Invariant[ExistedId, Option]
           .isPreservedOnState(Option(1l), Set(103l, 4l, 78l, 32l, 8l, 1l))
-          .fold({
-            Left(_)
-          }, { _ => success })
+          .fold(Left(_), { _ => success })
 
         _ <- Invariant[SuitableRoles, cats.Id]
           .isPreservedOnState(Set(1, 7), Set(1, 3, 4, 5, 6, 7, 8))
-          .fold({
-            Left(_)
-          }, { _ => success })
+          .fold(Left(_), { _ => success })
 
         out <- Invariant[UniqueName, cats.Id]
           .isPreservedOnState("aa", Set("b", "c", "d", "e"))
-          .fold({
-            Left(_)
-          }, { _ => success })
+          .fold(Left(_), { _ => success })
       } yield out
 
     println(r)
