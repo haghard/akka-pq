@@ -58,7 +58,6 @@ object Events {
   // A Typeclass for dynamic-dispatch on events
   trait EventHandler[Events] {
     type Out
-
     def handleEvent(eventName: String, payload: String): Either[String, Out]
   }
 

@@ -25,9 +25,9 @@ object Invariants {
     def emptyInputMessage = s"Empty input while checking $name"
   }
 
-  sealed trait Invariant {
-    def isPreservedOnState[F[_], A, B](fa: F[A], on: B)(implicit
-      P: Precondition[A, B], C: Catamorphism[F], A: cats.Applicative[F]): Either[String, F[Unit]]
+  sealed trait Invariant[F[_]] {
+    def isPreservedOnState[T, State](fa: F[T], on: State)
+      (implicit P: Precondition[T, State], C: Catamorphism[F]): Either[String, F[Unit]]
   }
 
   class ExistedId extends Precondition[Long, Set[Long]] {
@@ -77,10 +77,12 @@ object Invariants {
   }
 
   object Invariant {
-    def apply[T <: Precondition[_, _] : ClassTag] = {
-      new Invariant {
-        override def isPreservedOnState[F[_], T, State](in: F[T], state: State)
-          (implicit P: Precondition[T, State], C: Catamorphism[F], A: cats.Applicative[F]): Either[String, F[Unit]] = {
+    def apply[T <: Precondition[_, _] : ClassTag, F[_] : cats.Applicative] = {
+      new Invariant[F] {
+        val A: cats.Applicative[F] = implicitly[cats.Applicative[F]]
+
+        override def isPreservedOnState[T, State](in: F[T], state: State)
+          (implicit P: Precondition[T, State], C: Catamorphism[F]): Either[String, F[Unit]] = {
           println(P.name)
           C.cata(in)(Left(P.emptyInputMessage), { input =>
             if (P(input, state)) Right(A.pure(())) else Left(P.message(input, state))
@@ -95,20 +97,20 @@ object Invariants {
     val success = Right(1)
     val r =
       for {
-        _ <- Invariant[ExistedId]
+        _ <- Invariant[ExistedId, Option]
           .isPreservedOnState(Option(1l), Set(103l, 4l, 78l, 32l, 8l, 1l))
           .fold({
             Left(_)
           }, { _ => success })
 
-        _ <- Invariant[SuitableRoles]
-          .isPreservedOnState[cats.Id, Set[Int], Set[Int]](Set(1, 7), Set(1, 3, 4, 5, 6, 7, 8))
+        _ <- Invariant[SuitableRoles, cats.Id]
+          .isPreservedOnState(Set(1, 7), Set(1, 3, 4, 5, 6, 7, 8))
           .fold({
             Left(_)
           }, { _ => success })
 
-        out <- Invariant[UniqueName]
-          .isPreservedOnState[cats.Id, String, Set[String]]("aa", Set("b", "c", "d", "e"))
+        out <- Invariant[UniqueName, cats.Id]
+          .isPreservedOnState("aa", Set("b", "c", "d", "e"))
           .fold({
             Left(_)
           }, { _ => success })
