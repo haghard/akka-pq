@@ -4,11 +4,13 @@ import java.lang.{Long => JLong}
 
 import akka.event.LoggingAdapter
 import akka.persistence.cassandra._
-import akka.stream.scaladsl.Source
-import akka.stream.stage.{AsyncCallback, GraphStage, GraphStageLogic, OutHandler}
-import akka.stream.{Attributes, Outlet, SourceShape}
+import akka.stream._
+import akka.stream.scaladsl.{Keep, Source}
+import akka.stream.stage._
 import com.datastax.driver.core._
 
+import scala.annotation.tailrec
+import scala.concurrent.{Future, Promise}
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 
@@ -39,8 +41,8 @@ A few simple guarantees.
  * Taken from https://github.com/akka/alpakka/blob/master/cassandra/src/main/scala/akka/stream/alpakka/cassandra/CassandraSourceStage.scala
  * and adapted with respect to akka-cassandra-persistence schema
  */
-final class PsJournal(session0: Session, journal: String, persistenceId: String,
-  offset: Long, partitionSize: Long, log: LoggingAdapter, pageSize: Int) extends GraphStage[SourceShape[Row]] {
+final class PsJournal(client: Cluster, keySpace: String, journal: String, persistenceId: String, offset: Long, partitionSize: Long,
+  log: LoggingAdapter, pageSize: Int) extends GraphStage[SourceShape[Row]] {
   val out: Outlet[Row] = Outlet[Row](akka.event.Logging.simpleName(this) + ".out")
 
   override val shape: SourceShape[Row] = SourceShape(out)
@@ -58,7 +60,6 @@ final class PsJournal(session0: Session, journal: String, persistenceId: String,
   */
   override protected def initialAttributes: Attributes =
     Attributes.name(persistenceId)
-
   //.and(ActorAttributes.dispatcher("cassandra-dispatcher"))
 
   private def navigatePartition(sequenceNr: Long, partitionSize: Long): Long = sequenceNr / partitionSize
@@ -66,6 +67,16 @@ final class PsJournal(session0: Session, journal: String, persistenceId: String,
   private def statement(preparedStmt: PreparedStatement, persistenceId: String,
     partition: JLong, sequenceNr: JLong, pageSize: Int) =
     new BoundStatement(preparedStmt).bind(persistenceId, partition, sequenceNr).setFetchSize(pageSize)
+
+  @tailrec private def tryToConnect[T](n: Int)(f: ⇒ T): T =
+    Try(f) match {
+      case Success(x) ⇒ x
+      case _ if n > 1 ⇒
+        Thread.sleep(3000)
+        log.info("Getting connection ...  attempt:" + n)
+        tryToConnect(n - 1)(f)
+      case Failure(e) ⇒ throw e
+    }
 
   override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
     new GraphStageLogic(shape) {
@@ -81,17 +92,15 @@ final class PsJournal(session0: Session, journal: String, persistenceId: String,
       var sequenceNr = offset
       var partitionIter = Option.empty[ResultSet]
       var onMessageCallback: AsyncCallback[Try[ResultSet]] = _
-      val preparedStmt = session0.prepare(queryByPersistenceId)
+      val session = tryToConnect(Int.MaxValue)(client connect keySpace)
+      val preparedStmt = session.prepare(queryByPersistenceId)
 
       override def preStart(): Unit = {
         implicit val _ = materializer.executionContext
         onMessageCallback = getAsyncCallback[Try[ResultSet]](onFinish)
         val partition = navigatePartition(sequenceNr, partitionSize): JLong
-
-        //val srcName = inheritedAttributes.get(Attributes.Name(persistenceId))
-        //log.info("{} Start query: {}\npartition:{} sequenceNr:{}", srcName, queryByPersistenceId, partition, sequenceNr)
         val stmt = statement(preparedStmt, persistenceId, partition, sequenceNr, pageSize)
-        session0.executeAsync(stmt).asScala.onComplete(onMessageCallback.invoke)
+        session.executeAsync(stmt).asScala.onComplete(onMessageCallback.invoke)
       }
 
       setHandler(
@@ -107,9 +116,8 @@ final class PsJournal(session0: Session, journal: String, persistenceId: String,
                 if (iter.isExhausted) {
                   //a current partition is exhausted, let's try to read from the next partition
                   val nextPartition = navigatePartition(sequenceNr, partitionSize): JLong
-                  //log.info("Query: {}\npartition:{}  sequenceNr:{}", queryByPersistenceId, nextPartition, sequenceNr)
                   val stmt = statement(preparedStmt, persistenceId, nextPartition, sequenceNr, pageSize)
-                  session0.executeAsync(stmt).asScala.onComplete(onMessageCallback.invoke)
+                  session.executeAsync(stmt).asScala.onComplete(onMessageCallback.invoke)
                 } else {
                   //Your page size less than akka-cassandra-persistence partition size(cassandra-journal.target-partition-size)
                   //End of page but still have something to read in from the current partition,
@@ -117,7 +125,7 @@ final class PsJournal(session0: Session, journal: String, persistenceId: String,
                   iter.fetchMoreResults.asScala.onComplete(onMessageCallback.invoke)
                 }
               case None ⇒
-                log.info("A request from a downstream had arrived before we read the first row")
+                //log.info("A request from a downstream had arrived before we read the first row")
                 ()
             }
           }
@@ -146,35 +154,58 @@ final class PsJournal(session0: Session, journal: String, persistenceId: String,
 
       override def postStop = {
         //cleaning up resources should be done here
+        //session.closeAsync
       }
     }
-
-  /*private def guavaToScala[A](guavaFuture: ListenableFuture[A]): Future[A] = {
-    val p = Promise[A]()
-    Futures.addCallback(
-      guavaFuture,
-      new FutureCallback[A] {
-        override def onSuccess(a: A): Unit = p.success(a)
-        override def onFailure(err: Throwable): Unit = p.failure(err)
-      }
-    )
-    p.future
-  }*/
 }
 
 object PsJournal {
-  /**
-   *
-   *
-   */
-  def apply[T: Reader : ClassTag](session: Session, journal: String, persistenceId: String,
-    offset: Long,
-    log: LoggingAdapter,
-    partitionSize: Long, pageSize: Int = 128
-  ) =
-    Source.fromGraph(new PsJournal(session, journal, persistenceId, offset, partitionSize, log, pageSize))
-      .map { row =>
-        //println(row.getColumnDefinitions.toString)
-        row.as[T]
+
+  def apply[T: Reader : ClassTag](client: Cluster, keySpace: String, journal: String, persistenceId: String,
+    offset: Long, log: LoggingAdapter, partitionSize: Long, pageSize: Int = 32) = {
+    Source.fromGraph(new PsJournal(client, keySpace, journal, persistenceId, offset, partitionSize, log, pageSize))
+      .map(_.as[T])
+      .viaMat(new LastSeen)(Keep.right)
+  }
+
+  case class LastSeenException[T](th: Throwable, last: Option[T]) extends Exception(th)
+
+  final class LastSeen[T] extends GraphStageWithMaterializedValue[FlowShape[T, T], Future[LastSeenException[T] Either Option[T]]] {
+    override val shape = FlowShape(Inlet[T]("in"), Outlet[T]("out"))
+
+    override def createLogicAndMaterializedValue(inheritedAttributes: Attributes): (GraphStageLogic, Future[LastSeenException[T] Either Option[T]]) = {
+      val matVal = Promise[LastSeenException[T] Either Option[T]]
+      val logic = new GraphStageLogic(shape) {
+        import shape._
+
+        private var current: LastSeenException[T] Either Option[T] = Right(Option.empty[T])
+
+        setHandler(in, new InHandler {
+          override def onPush(): Unit = {
+            val element = grab(in)
+            current = Right(Some(element))
+            push(out, element)
+          }
+
+          override def onUpstreamFinish(): Unit = {
+            matVal.success(current)
+            super.onUpstreamFinish()
+          }
+
+          override def onUpstreamFailure(ex: Throwable): Unit = {
+            println("onUpstreamFailure")
+            matVal.success(Left(LastSeenException[T](ex, current.fold({_ => None}, identity))))
+            super.onUpstreamFinish()
+            //don't fail here intentionally
+            //super.onUpstreamFailure(LastSeenException(ex, current))
+          }
+        })
+
+        setHandler(out, new OutHandler {
+          override def onPull(): Unit = pull(in)
+        })
       }
+      (logic, matVal.future)
+    }
+  }
 }

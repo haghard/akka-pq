@@ -4,7 +4,6 @@ import java.util.UUID
 
 import com.datastax.driver.core.Row
 import shapeless._
-
 import scala.reflect.ClassTag
 import scala.util.Try
 
@@ -14,10 +13,6 @@ package object blog {
     def apply(row: Row, fields: Vector[String], ind: Int): Option[A]
   }
 
-  /*Try(row.getInt(field)).fold({ th =>
-          Invalid(s"Couldn't parse $field to Int: ${th.getMessage} ").toValidatedNel
-        }, { x => Valid(x).toValidatedNel })
-   */
   implicit object IntReader extends Reader[Int] {
     override def apply(row: Row, fields: Vector[String], ind: Int): Option[Int] = {
       val field = fields(ind)
@@ -97,16 +92,35 @@ package object blog {
       val fields = tag.runtimeClass.getDeclaredFields.map(_.getName).toVector
       parser(row, fields, 0)
     }
-  }
 
-
-
-  // Named induction step: (E, Tail)
-  /*
-    implicit def inductionStepNamed[E, Tail](implicit h: Reader[E], tail: Reader[Tail]) = new Reader[(E,Tail)] {
-      h.apply()
-      val name: String = s"${n.name}, ${tail.name}"
+/*
+    @tailrec
+    private def loop(row: Row, ind: Int, limit: Int, acc: Array[Any]): Unit = {
+      if(ind <= limit) {
+        acc.update(ind, row.get[Any](ind, classOf[Any]))
+        loop(row, ind + 1, limit, acc)
+      } else ()
     }
-  */
 
+    import shapeless._
+    import ops.function._
+    import shapeless.ops.traversable._
+    import shapeless.syntax.std.traversable._
+    import syntax.std.function._
+    import ops.function._
+    private def from[T, Repr <: HList](row: Array[Any])
+                    (implicit gen: Generic.Aux[T, Repr], ft: FromTraversable[Repr]): Option[T] = {
+      row.toHList[Repr].map(gen.from _)
+    }
+
+    def fromRow[T](implicit G: Generic[T], tag: ClassTag[T]): Option[T] = {
+      //implicit val G = implicitly[Generic[T]]
+      val fields = tag.runtimeClass.getDeclaredFields.map(_.getName).toVector
+      val array = Array[Any](fields.size)
+      loop(row, 0, array.size-1, Array[Any](fields.size))
+      from(array)
+    }
+*/
+
+  }
 }
