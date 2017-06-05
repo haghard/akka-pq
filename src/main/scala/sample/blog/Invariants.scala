@@ -20,13 +20,13 @@ object Invariants {
 
     def apply(in: In, state: On): Boolean
 
-    def message(in: In, state: On): String
+    def errorMessage(in: In, state: On): String
 
     def emptyInputMessage = s"Empty input while checking $name"
   }
 
   sealed trait Invariant[F[_]] {
-    def isPreservedOnState[T, State](fa: F[T], on: State)
+    def isPreservedOnState[T, State](fa: F[T], on: State, ignoreNull:Boolean = false)
       (implicit P: Precondition[T, State], C: Catamorphism[F]): Either[String, F[Unit]]
   }
 
@@ -35,7 +35,7 @@ object Invariants {
 
     override def apply(in: Long, on: Set[Long]): Boolean = on.contains(in)
 
-    override def message(in: Long, on: Set[Long]) = s"$in doesn't exists"
+    override def errorMessage(in: Long, on: Set[Long]) = s"$in doesn't exists"
   }
 
   class UniqueName extends Precondition[String, Set[String]] {
@@ -43,7 +43,7 @@ object Invariants {
 
     override def apply(name: String, state: Set[String]): Boolean = !state.contains(name)
 
-    override def message(name: String, state: Set[String]) = s"$name is not unique"
+    override def errorMessage(name: String, state: Set[String]) = s"$name is not unique"
   }
 
   class SuitableRoles extends Precondition[Set[Int], Set[Int]] {
@@ -51,7 +51,7 @@ object Invariants {
 
     override def apply(ids: Set[Int], state: Set[Int]) = ids.filter(id => !state.contains(id)).isEmpty
 
-    override def message(ids: Set[Int], state: Set[Int]) = s"User with roles [${ids.mkString(",")}] is not allowed to do this operation"
+    override def errorMessage(ids: Set[Int], state: Set[Int]) = s"User with roles [${ids.mkString(",")}] is not allowed to do this operation"
   }
 
   implicit val aa = new ExistedId()
@@ -80,12 +80,18 @@ object Invariants {
     def apply[T <: Precondition[_, _] : ClassTag, F[_] : cats.Applicative] = {
       new Invariant[F] {
         val A: cats.Applicative[F] = implicitly[cats.Applicative[F]]
-        override def isPreservedOnState[T, State](in: F[T], state: State)
+        val success: F[Unit] = A.pure(())
+        override def isPreservedOnState[T, State](in: F[T], state: State, ignoreNull: Boolean = false)
           (implicit P: Precondition[T, State], C: Catamorphism[F]): Either[String, F[Unit]] = {
-          println(P.name)
-          C.cata(in)(Left(P.emptyInputMessage), { input =>
-            if (P(input, state)) Right(A.pure(())) else Left(P.message(input, state))
-          })
+          //println(P.name)
+          if(ignoreNull)
+            C.cata(in)(Right(success), { input =>
+              if (P(input, state)) Right(success) else Left(P.errorMessage(input, state))
+            })
+          else
+            C.cata(in)(Left(P.emptyInputMessage), { input =>
+              if (P(input, state)) Right(success) else Left(P.errorMessage(input, state))
+            })
         }
       }
     }
@@ -97,7 +103,7 @@ object Invariants {
     val r =
       for {
         _ <- Invariant[ExistedId, Option]
-          .isPreservedOnState(Option(1l), Set(103l, 4l, 78l, 32l, 8l, 1l))
+          .isPreservedOnState(None, Set(103l, 4l, 78l, 32l, 8l, 1l), true)
           .fold(Left(_), { _ => success })
 
         _ <- Invariant[SuitableRoles, cats.Id]
@@ -105,7 +111,7 @@ object Invariants {
           .fold(Left(_), { _ => success })
 
         out <- Invariant[UniqueName, cats.Id]
-          .isPreservedOnState("aa", Set("b", "c", "d", "e"))
+          .isPreservedOnState("bq", Set("b", "c", "d", "e"))
           .fold(Left(_), { _ => success })
       } yield out
 
