@@ -45,6 +45,8 @@ final class PsJournal(client: Cluster, keySpace: String, journal: String, persis
   log: LoggingAdapter, pageSize: Int) extends GraphStage[SourceShape[Row]] {
   val out: Outlet[Row] = Outlet[Row](akka.event.Logging.simpleName(this) + ".out")
 
+  private val retryTimeout = 10000
+
   override val shape: SourceShape[Row] = SourceShape(out)
 
   private val queryByPersistenceId =
@@ -68,14 +70,14 @@ final class PsJournal(client: Cluster, keySpace: String, journal: String, persis
     partition: JLong, sequenceNr: JLong, pageSize: Int) =
     new BoundStatement(preparedStmt).bind(persistenceId, partition, sequenceNr).setFetchSize(pageSize)
 
-  @tailrec private def tryToConnect[T](n: Int)(f: ⇒ T): T =
+  @tailrec private def tryToConnect[T](n: Int)(f: => T): T =
     Try(f) match {
-      case Success(x) ⇒ x
-      case _ if n > 1 ⇒
-        Thread.sleep(3000)
-        log.info("Getting connection ...  attempt:" + n)
+      case Success(x) => x
+      case _ if n > 1 =>
+        Thread.sleep(retryTimeout)
+        log.info("Getting cassandra connection")
         tryToConnect(n - 1)(f)
-      case Failure(e) ⇒ throw e
+      case Failure(e) => throw e
     }
 
   override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
@@ -92,7 +94,7 @@ final class PsJournal(client: Cluster, keySpace: String, journal: String, persis
       var sequenceNr = offset
       var partitionIter = Option.empty[ResultSet]
       var onMessageCallback: AsyncCallback[Try[ResultSet]] = _
-      val session = tryToConnect(Int.MaxValue)(client connect keySpace)
+      val session = tryToConnect(Int.MaxValue)(client.connect(keySpace))
       val preparedStmt = session.prepare(queryByPersistenceId)
 
       override def preStart(): Unit = {
@@ -170,20 +172,20 @@ object PsJournal {
 
   case class LastSeenException[T](th: Throwable, last: Option[T]) extends Exception(th)
 
-  final class LastSeen[T] extends GraphStageWithMaterializedValue[FlowShape[T, T], Future[LastSeenException[T] Either Option[T]]] {
+  final class LastSeen[T] extends GraphStageWithMaterializedValue[FlowShape[T, T], Future[Option[T]]] {
     override val shape = FlowShape(Inlet[T]("in"), Outlet[T]("out"))
 
-    override def createLogicAndMaterializedValue(inheritedAttributes: Attributes): (GraphStageLogic, Future[LastSeenException[T] Either Option[T]]) = {
-      val matVal = Promise[LastSeenException[T] Either Option[T]]
+    override def createLogicAndMaterializedValue(inheritedAttributes: Attributes): (GraphStageLogic, Future[Option[T]]) = {
+      val matVal = Promise[Option[T]]
       val logic = new GraphStageLogic(shape) {
         import shape._
 
-        private var current: LastSeenException[T] Either Option[T] = Right(Option.empty[T])
+        private var current = Option.empty[T]
 
         setHandler(in, new InHandler {
           override def onPush(): Unit = {
             val element = grab(in)
-            current = Right(Some(element))
+            current = Some(element)
             push(out, element)
           }
 
@@ -194,10 +196,11 @@ object PsJournal {
 
           override def onUpstreamFailure(ex: Throwable): Unit = {
             println("onUpstreamFailure")
-            matVal.success(Left(LastSeenException[T](ex, current.fold({_ => None}, identity))))
-            super.onUpstreamFinish()
+            matVal.success(current)
+
             //don't fail here intentionally
             //super.onUpstreamFailure(LastSeenException(ex, current))
+            super.onUpstreamFinish()
           }
         })
 

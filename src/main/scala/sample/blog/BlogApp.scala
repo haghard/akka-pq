@@ -5,6 +5,7 @@ import java.util.UUID
 
 import akka.actor.ActorSystem
 import akka.event.LoggingAdapter
+import akka.persistence.cassandra.CassandraMetricsRegistry
 import akka.stream.scaladsl.{GraphDSL, Keep, Sink, Source, ZipWith}
 import akka.stream._
 import com.datastax.driver.core.{Cluster, Session}
@@ -122,8 +123,8 @@ object BlogApp {
       // Create an Akka system
       implicit val system = ActorSystem("ClusterSystem", config)
 
-      //val cassandraMetricsRegistry = CassandraMetricsRegistry.get(system)
-      //cassandraMetricsRegistry.getRegistry.getHistograms
+      val cassandraMetricsRegistry = CassandraMetricsRegistry.get(system)
+      cassandraMetricsRegistry.getRegistry.getHistograms
 
       implicit val m = akka.stream.ActorMaterializer(ActorMaterializerSettings(system)
         .withDispatcher("cassandra-dispatcher")
@@ -148,42 +149,12 @@ object BlogApp {
       val cp = buildContactPoints(contactPoints, port0)
       val keySpace = config.getString("cassandra-journal.keyspace")
 
-      def client = com.datastax.driver.core.Cluster.builder
+      val client = com.datastax.driver.core.Cluster.builder
         .addContactPointsWithPorts(cp.asJava)
         .build
-        //.connect(keySpace)
-
 
       import scala.concurrent.duration._
       changes(client, keySpace, table, Roland, 0l, system.log, partitionSize, pageSize, 10.seconds)
-
-/*
-
-      journal(session, table, Roland, 0l, system.log, partitionSize, pageSize).run()
-        .flatMap {
-          journal(session, table, rec.persistence_id, rec.sequence_nr + 1, system.log, partitionSize, pageSize).run()
-        }
-
-        .onComplete {
-        case Success(r) =>
-          r.fold(stop(system)) { rec =>
-            println("Last seen1 : " + r)
-            Thread.sleep(20000)
-            
-
-            journal(session, table, rec.persistence_id, rec.sequence_nr + 1, system.log, partitionSize, pageSize).run().onComplete {
-              case Success(r) =>
-                println("Last seen2 : " + r)
-                stop(system)
-              case Failure(ex) =>
-                stop(system)
-            }
-          }
-        case Failure(ex) =>
-          println("Failure 2")
-          stop(system)
-      }
-*/
 
       /*
         val authorListingRegion = ClusterSharding(system).start(
@@ -206,8 +177,8 @@ object BlogApp {
     }
   }
 
-  def journal(client: Cluster, keySpace: String, table: String, pId: String, offset: Long, log: LoggingAdapter,
-    partitionSize: Long, pageSize: Int) = {
+  def journal(client: Cluster, keySpace: String, table: String, pId: String, offset: Long,
+    log: LoggingAdapter, partitionSize: Long, pageSize: Int) = {
     import scala.concurrent.duration._
     PsJournal[Record](client, keySpace, table, pId, offset, log, partitionSize, pageSize)
       .throttle(15, 1.second, 15, ThrottleMode.Shaping)
@@ -220,53 +191,16 @@ object BlogApp {
         .run()
         .onComplete {
           case Success(last) =>
-            var nextOffset = 0l
-            last match {
-              case Left(ex) =>
-                println("Error: " + ex.last)
-                nextOffset = ex.last.fold(offset)(_.get.sequence_nr + 1)
-              case Right(l) =>
-                println("Page")
-                nextOffset = l.fold(offset)(_.get.sequence_nr + 1)
-            }
+            val nextOffset = last.fold(offset)(_.get.sequence_nr + 1)
             system.scheduler.scheduleOnce(interval, new Runnable {
               override def run = {
                 println(s"Next: $nextOffset")
                 changes(client, keySpace, table, pId, nextOffset, log, partitionSize, pageSize, interval)
               }
             })(M.executionContext)
-
           case Failure(ex) =>
-            println(s"LastSeenException")
+            println(s"Unexpected error:" + ex.getMessage)
             System.exit(-1)
         }(M.executionContext)
     }
 }
-
-
-/*startupSharedJournal(system, startStore = (port == "2551"), path =
-  ActorPath.fromString("akka.tcp://ClusterSystem@127.0.0.1:2551/user/store"))
-*/
-
-/*
-    def startupSharedJournal(system: ActorSystem, startStore: Boolean, path: ActorPath): Unit = {
-      // Start the shared journal one one node (don't crash this SPOF)
-      // This will not be needed with a distributed journal
-      if (startStore)
-        system.actorOf(Props[SharedLeveldbStore], "store")
-      // register the shared journal
-      import system.dispatcher
-      implicit val timeout = Timeout(15.seconds)
-      val f = (system.actorSelection(path) ? Identify(None))
-      f.onSuccess {
-        case ActorIdentity(_, Some(ref)) => SharedLeveldbJournal.setStore(ref, system)
-        case _ =>
-          system.log.error("Shared journal not started at {}", path)
-          system.terminate()
-      }
-      f.onFailure {
-        case _ =>
-          system.log.error("Lookup of shared journal at {} timed out", path)
-          system.terminate()
-      }
-     */
