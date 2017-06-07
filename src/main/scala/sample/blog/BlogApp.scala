@@ -199,7 +199,7 @@ object BlogApp {
             val nextOffset = last.fold(offset)(_.get.sequence_nr + 1)
             system.scheduler.scheduleOnce(interval, new Runnable {
               override def run = {
-                println(s"Next: $nextOffset")
+                println(s"Trying to read starting from: $nextOffset")
                 changes(client, keySpace, table, pId, nextOffset, log, partitionSize, pageSize, interval)
               }
             })(M.executionContext)
@@ -218,7 +218,7 @@ object BlogApp {
               val nextOffset = last.fold(offset)(_ + 1)
               system.scheduler.scheduleOnce(interval, new Runnable {
                 override def run = {
-                  println(s"Next: $nextOffset")
+                  println(s"Trying to read starting from: $nextOffset")
                   changes2(pId, nextOffset, log, interval)
                 }
               })(M.executionContext)
