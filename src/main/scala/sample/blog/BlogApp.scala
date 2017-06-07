@@ -3,17 +3,21 @@ package sample.blog
 import java.net.InetSocketAddress
 import java.util.UUID
 
-import akka.actor.ActorSystem
+import akka.Done
+import akka.actor.{ActorSystem, Props}
+import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
 import akka.event.LoggingAdapter
 import akka.persistence.cassandra.CassandraMetricsRegistry
+import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
+import akka.persistence.query.PersistenceQuery
 import akka.stream.scaladsl.{GraphDSL, Keep, Sink, Source, ZipWith}
 import akka.stream._
 import com.datastax.driver.core.{Cluster, Session}
 import com.typesafe.config.ConfigFactory
-import sample.blog.PsJournal.LastSeenException
+import sample.blog.PsJournal.{LastSeen, LastSeenException}
 
 import scala.collection.immutable
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.util.{Failure, Success}
 
@@ -132,16 +136,6 @@ object BlogApp {
 
       implicit val e = m.executionContext
 
-      /*
-        val journal = PersistenceQuery(system).readJournalFor[CassandraReadJournal](CassandraReadJournal.Identifier)
-        val flow =
-          journal.currentEventsByPersistenceId("", 0, Int.MaxValue)
-            .toMat(Sink.foreach { _ =>
-              println("")
-            })(Keep.right)
-
-        val f: Future[Done] = flow.run()
-      */
 
       import scala.collection.JavaConverters._
       val contactPoints = config.getStringList("cassandra-journal.contact-points").asScala.toList
@@ -149,31 +143,33 @@ object BlogApp {
       val cp = buildContactPoints(contactPoints, port0)
       val keySpace = config.getString("cassandra-journal.keyspace")
 
-      val client = com.datastax.driver.core.Cluster.builder
+      /*val client = com.datastax.driver.core.Cluster.builder
         .addContactPointsWithPorts(cp.asJava)
-        .build
+        .build*/
 
       import scala.concurrent.duration._
-      changes(client, keySpace, table, Roland, 0l, system.log, partitionSize, pageSize, 10.seconds)
 
-      /*
-        val authorListingRegion = ClusterSharding(system).start(
-          typeName = AuthorListing.shardName,
-          entityProps = AuthorListing.props(),
-          settings = ClusterShardingSettings(system).withRememberEntities(true),
-          extractEntityId = AuthorListing.idExtractor,
-          extractShardId = AuthorListing.shardResolver)
-        ClusterSharding(system).start(
-          typeName = Post.shardName,
-          entityProps = Post.props(authorListingRegion),
-          settings = ClusterShardingSettings(system).withRememberEntities(true),
-          extractEntityId = Post.idExtractor,
-          extractShardId = Post.shardResolver)
+      //changes(client, keySpace, table, Roland, 0l, system.log, partitionSize, pageSize, 10.seconds)
+      changes2(Roland, 0l, system.log, 10.seconds)
 
-        if (port != "2551" && port != "2552")
-          system.actorOf(Props[Bot], "bot")
+
+/*
+      val authorListingRegion = ClusterSharding(system).start(
+        typeName = AuthorListing.shardName,
+        entityProps = AuthorListing.props(),
+        settings = ClusterShardingSettings(system).withRememberEntities(true),
+        extractEntityId = AuthorListing.idExtractor,
+        extractShardId = AuthorListing.shardResolver)
+      ClusterSharding(system).start(
+        typeName = Post.shardName,
+        entityProps = Post.props(authorListingRegion),
+        settings = ClusterShardingSettings(system).withRememberEntities(true),
+        extractEntityId = Post.idExtractor,
+        extractShardId = Post.shardResolver)
+
+      if (port != "2551" && port != "2552")
+        system.actorOf(Props[Bot], "bot")
       */
-
     }
   }
 
@@ -184,6 +180,15 @@ object BlogApp {
       .throttle(15, 1.second, 15, ThrottleMode.Shaping)
       .toMat(Sink.foreach { r => r.foreach { obj => println(obj.sequence_nr) } })(Keep.left)
   }
+
+  def journal2(system: ActorSystem, pId: String, offset: Long, log: LoggingAdapter) = {
+      import scala.concurrent.duration._
+      PersistenceQuery(system).readJournalFor[CassandraReadJournal](CassandraReadJournal.Identifier)
+        .currentEventsByPersistenceId(Roland, offset, Int.MaxValue).map(_.sequenceNr)
+        .viaMat(new LastSeen)(Keep.right)
+        .throttle(15, 1.second, 10, ThrottleMode.Shaping)
+        .toMat(Sink.foreach {  sequence_nr => println(sequence_nr) })(Keep.left)
+    }
 
   def changes(client: Cluster, keySpace: String, table: String, pId: String, offset: Long, log: LoggingAdapter, partitionSize: Long,
     pageSize: Int, interval: FiniteDuration)(implicit system: ActorSystem, M: ActorMaterializer): Unit = {
@@ -203,4 +208,23 @@ object BlogApp {
             System.exit(-1)
         }(M.executionContext)
     }
+
+  def changes2(pId: String, offset: Long, log: LoggingAdapter, interval: FiniteDuration)
+    (implicit system: ActorSystem, M: ActorMaterializer): Unit = {
+        journal2(system, pId, offset, log)
+          .run()
+          .onComplete {
+            case Success(last) =>
+              val nextOffset = last.fold(offset)(_ + 1)
+              system.scheduler.scheduleOnce(interval, new Runnable {
+                override def run = {
+                  println(s"Next: $nextOffset")
+                  changes2(pId, nextOffset, log, interval)
+                }
+              })(M.executionContext)
+            case Failure(ex) =>
+              println(s"Unexpected error:" + ex.getMessage)
+              System.exit(-1)
+          }(M.executionContext)
+      }
 }
