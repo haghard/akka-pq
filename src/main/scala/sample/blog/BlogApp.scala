@@ -14,7 +14,7 @@ import akka.stream.scaladsl.{GraphDSL, Keep, Sink, Source, ZipWith}
 import akka.stream._
 import com.datastax.driver.core.{Cluster, Session}
 import com.typesafe.config.ConfigFactory
-import sample.blog.PsJournal.{LastSeen, LastSeenException}
+import sample.blog.PsJournal.LastSeen
 
 import scala.collection.immutable
 import scala.concurrent.{Await, ExecutionContext, Future}
