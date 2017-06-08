@@ -136,21 +136,20 @@ object BlogApp {
 
       implicit val e = m.executionContext
 
-
+      import scala.concurrent.duration._
       import scala.collection.JavaConverters._
+
       val contactPoints = config.getStringList("cassandra-journal.contact-points").asScala.toList
       val port0 = config.getInt("cassandra-journal.port")
       val cp = buildContactPoints(contactPoints, port0)
       val keySpace = config.getString("cassandra-journal.keyspace")
 
-      /*val client = com.datastax.driver.core.Cluster.builder
+      val client = com.datastax.driver.core.Cluster.builder
         .addContactPointsWithPorts(cp.asJava)
-        .build*/
+        .build
 
-      import scala.concurrent.duration._
-
-      //changes(client, keySpace, table, Roland, 0l, system.log, partitionSize, pageSize, 10.seconds)
-      changes2(Roland, 0l, system.log, 10.seconds)
+      changes(client, keySpace, table, Roland, 0l, partitionSize, pageSize, 10.seconds)
+      //changes2(Roland, 0l, 10.seconds)
 
 
 /*
@@ -173,15 +172,14 @@ object BlogApp {
     }
   }
 
-  def journal(client: Cluster, keySpace: String, table: String, pId: String, offset: Long,
-    log: LoggingAdapter, partitionSize: Long, pageSize: Int) = {
+  def journal(client: Cluster, keySpace: String, table: String, pId: String, offset: Long, partitionSize: Long, pageSize: Int) = {
     import scala.concurrent.duration._
-    PsJournal[Record](client, keySpace, table, pId, offset, log, partitionSize, pageSize)
+    PsJournal[Record](client, keySpace, table, pId, offset, partitionSize, pageSize)
       .throttle(15, 1.second, 15, ThrottleMode.Shaping)
       .toMat(Sink.foreach { r => r.foreach { obj => println(obj.sequence_nr) } })(Keep.left)
   }
 
-  def journal2(system: ActorSystem, pId: String, offset: Long, log: LoggingAdapter) = {
+  def journal2(system: ActorSystem, pId: String, offset: Long) = {
       import scala.concurrent.duration._
       PersistenceQuery(system).readJournalFor[CassandraReadJournal](CassandraReadJournal.Identifier)
         .currentEventsByPersistenceId(Roland, offset, Int.MaxValue).map(_.sequenceNr)
@@ -190,9 +188,9 @@ object BlogApp {
         .toMat(Sink.foreach {  sequence_nr => println(sequence_nr) })(Keep.left)
     }
 
-  def changes(client: Cluster, keySpace: String, table: String, pId: String, offset: Long, log: LoggingAdapter, partitionSize: Long,
+  def changes(client: Cluster, keySpace: String, table: String, pId: String, offset: Long, partitionSize: Long,
     pageSize: Int, interval: FiniteDuration)(implicit system: ActorSystem, M: ActorMaterializer): Unit = {
-      journal(client, keySpace, table, pId, offset, log, partitionSize, pageSize)
+      journal(client, keySpace, table, pId, offset, partitionSize, pageSize)
         .run()
         .onComplete {
           case Success(last) =>
@@ -200,7 +198,7 @@ object BlogApp {
             system.scheduler.scheduleOnce(interval, new Runnable {
               override def run = {
                 println(s"Trying to read starting from: $nextOffset")
-                changes(client, keySpace, table, pId, nextOffset, log, partitionSize, pageSize, interval)
+                changes(client, keySpace, table, pId, nextOffset, partitionSize, pageSize, interval)
               }
             })(M.executionContext)
           case Failure(ex) =>
@@ -209,9 +207,9 @@ object BlogApp {
         }(M.executionContext)
     }
 
-  def changes2(pId: String, offset: Long, log: LoggingAdapter, interval: FiniteDuration)
+  def changes2(pId: String, offset: Long, interval: FiniteDuration)
     (implicit system: ActorSystem, M: ActorMaterializer): Unit = {
-        journal2(system, pId, offset, log)
+        journal2(system, pId, offset)
           .run()
           .onComplete {
             case Success(last) =>
@@ -219,7 +217,7 @@ object BlogApp {
               system.scheduler.scheduleOnce(interval, new Runnable {
                 override def run = {
                   println(s"Trying to read starting from: $nextOffset")
-                  changes2(pId, nextOffset, log, interval)
+                  changes2(pId, nextOffset, interval)
                 }
               })(M.executionContext)
             case Failure(ex) =>
