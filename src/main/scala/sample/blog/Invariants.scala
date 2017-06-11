@@ -1,7 +1,6 @@
 package sample.blog
 
 import cats.Applicative
-import cats.instances.option._
 
 import scala.reflect.ClassTag
 
@@ -15,78 +14,85 @@ object Invariants {
       for {a <- fa; f <- ff} yield f(a)
   }
 
-  trait Check[In, State] {
+  trait BooleanLogicCheck[In, State] {
     def name: String
-    def apply(in: In, state: State): Boolean
+
+    def apply(in: In, on: State): Boolean
+
     def errorMessage(in: In, state: State): String
+
     def emptyInputMessage = s"Empty input while checking $name"
   }
 
   sealed trait Precondition[F[_]] {
-    def isPreserved[T, State](fa: F[T], on: State, ignoreNull: Boolean = false)
-      (implicit P: Check[T, State], C: Catamorphism[F]): Either[String, F[Unit]]
+    def ignoreIfAbsent: Boolean
+    def against[T, State](fa: F[T], state: State/*, ignoreNull: Boolean = false*/)
+      (implicit P: BooleanLogicCheck[T, State], C: Catamorphism[F]): Either[String, F[T]]
   }
 
-  class ExistedId extends Check[Long, Set[Long]] {
+  class ExistedId extends BooleanLogicCheck[Long, Set[Long]] {
     override val name = "Precondition: KnownId"
     override def apply(in: Long, on: Set[Long]): Boolean = on.contains(in)
     override def errorMessage(in: Long, on: Set[Long]) = s"$in doesn't exists"
   }
 
-  class UniqueName extends Check[String, Set[String]] {
+  class UniqueName extends BooleanLogicCheck[String, Set[String]] {
     override val name = "Precondition: UniqueName"
-    override def apply(name: String, state: Set[String]): Boolean = !state.contains(name)
+    override def apply(in: String, state: Set[String]): Boolean = !state.contains(name)
     override def errorMessage(name: String, state: Set[String]) = s"$name is not unique"
   }
 
-  class SuitableRoles extends Check[Set[Int], Set[Int]] {
+
+  class SuitableRoles extends BooleanLogicCheck[Set[Int], Set[Int]] {
     override val name = "Precondition: HasRoles"
     override def apply(ids: Set[Int], state: Set[Int]) = ids.filter(id => !state.contains(id)).isEmpty
     override def errorMessage(ids: Set[Int], state: Set[Int]) = s"User with roles [${ids.mkString(",")}] is not allowed to do this operation"
   }
 
-  implicit val aa = new ExistedId()
-  implicit val ab = new UniqueName()
-  implicit val ac = new SuitableRoles()
-
   trait Catamorphism[F[_]] {
-    def cata[A, B](opt: F[A])(ifNull: ⇒ Either[String, F[Unit]], ifNotNull: A ⇒ Either[String, F[Unit]]): Either[String, F[Unit]]
+    def cata[A](opt: F[A])(ifNull: ⇒ Either[String, F[A]], ifNotNull: A ⇒ Either[String, F[A]]): Either[String, F[A]]
   }
 
   implicit object OptionalCatamorphism extends Catamorphism[Option] {
-    override def cata[A, B](opt: Option[A])(
-      ifNull: ⇒ Either[String, Option[Unit]],
-      ifNotNull: (A) ⇒ Either[String, Option[Unit]]
-    ): Either[String, Option[Unit]] = opt.fold(ifNull)(ifNotNull(_))
+    override def cata[A](opt: Option[A])(
+      ifNull: ⇒ Either[String, Option[A]],
+      ifNotNull: (A) ⇒ Either[String, Option[A]]
+    ): Either[String, Option[A]] = opt.fold(ifNull)(ifNotNull(_))
   }
 
   implicit object IdCatamorphism extends Catamorphism[cats.Id] {
-    override def cata[A, B](opt: cats.Id[A])(
-      ifNull: ⇒ Either[String, cats.Id[Unit]],
-      ifNotNull: (A) ⇒ Either[String, cats.Id[Unit]]
-    ): Either[String, cats.Id[Unit]] = if (opt == null) ifNull else ifNotNull(opt)
+    override def cata[A](opt: cats.Id[A])(
+      ifNull: ⇒ Either[String, cats.Id[A]],
+      ifNotNull: (A) ⇒ Either[String, cats.Id[A]]
+    ): Either[String, cats.Id[A]] = if (opt == null) ifNull else ifNotNull(opt)
   }
 
   object Precondition {
-    def apply[T <: Check[_, _] : ClassTag, F[_] : cats.Applicative] = {
+    //: cats.Applicative
+    private def create[T <: BooleanLogicCheck[_, _] : ClassTag, F[_]](ignore: Boolean) = {
       new Precondition[F] {
-        val A: cats.Applicative[F] = implicitly[cats.Applicative[F]]
-        val success: F[Unit] = A.pure(())
-
-        override def isPreserved[T, State](in: F[T], state: State, ignoreIfAbsent: Boolean = false)
-          (implicit C: Check[T, State], Cata: Catamorphism[F]): Either[String, F[Unit]] = {
-          //println(P.name)
+        override val ignoreIfAbsent = ignore
+        override def against[T, State](in: F[T], state: State)
+          (implicit B: BooleanLogicCheck[T, State], C: Catamorphism[F]): Either[String, F[T]] = {
+          val success: Either[String, F[T]] = Right(in)
+          println(B.name)
           if (ignoreIfAbsent)
-            Cata.cata(in)(Right(success), { input =>
-              if (C(input, state)) Right(success) else Left(C.errorMessage(input, state))
+            C.cata(in)(success, { input =>
+              if (B(input, state)) success else Left(B.errorMessage(input, state))
             })
           else
-            Cata.cata(in)(Left(C.emptyInputMessage), { input =>
-              if (C(input, state)) Right(success) else Left(C.errorMessage(input, state))
+            C.cata(in)(Left(B.emptyInputMessage), { input =>
+              if (B(input, state)) success else Left(B.errorMessage(input, state))
             })
         }
       }
     }
+
+    def nullable[T <: BooleanLogicCheck[_, _] : ClassTag, F[_]]: Precondition[F] =
+      create(true)
+
+    def apply[T <: BooleanLogicCheck[_, _] : ClassTag, F[_]]: Precondition[F] =
+      create(false)
   }
 
 
@@ -95,54 +101,57 @@ object Invariants {
   import syntax.std.function._
 
   /**
-  *
-  * P is a Product, that is a tuple or a case class
-  * F is an unconstrained type parameter
-  * L is an HList
-  * R is an unconstrained type parameter
-
-  * Generic.Aux[P, L]; this is the built-in “predicate” that Shapeless provides to encode the relation between a product type P and an HList L.
-  * It holds when it is possible to derive a Generic[P] instance that converts P into L
-
-  * FnToProduct.Aux[F, L => R]; is he built-in “predicate” that Shapeless provides to encode the relation that holds
-  * when F can be converted into a function from HList L to return type R; it holds when it is possible
-  * to derive an FnToProduct[F] instance called that converts F into L => R
-  *
-  * HLists can be seen as an alternative implementation of the concept of Tuple or more generally, of the concept of Product.
-  *
-  * Abstracting over arity
-  */
+   *
+   * P is a Product, that is a tuple or a case class
+   * F is an unconstrained type parameter
+   * L is an HList
+   * R is an unconstrained type parameter
+   *
+   * Generic.Aux[P, L]; this is the built-in “predicate” that Shapeless provides to encode the relation between a product type P and an HList L.
+   * It holds when it is possible to derive a Generic[P] instance that converts P into L
+   *
+   * FnToProduct.Aux[F, L => R]; is he built-in “predicate” that Shapeless provides to encode the relation that holds
+   * when F can be converted into a function from HList L to return type R; it holds when it is possible
+   * to derive an FnToProduct[F] instance called that converts F into L => R
+   *
+   * HLists can be seen as an alternative implementation of the concept of Tuple or more generally, of the concept of Product.
+   *
+   * Abstracting over arity
+   */
   def product[P <: Product, F, L <: HList, R](p: P)(f: F)
-             (implicit generic: Generic.Aux[P, L], fp: FnToProduct.Aux[F, L => R]): R = {
+    (implicit generic: Generic.Aux[P, L], fp: FnToProduct.Aux[F, L => R]): R = {
     val hlist = generic to p
     f.toProduct(hlist)
   }
 
   //http://typelevel.org/cats/typeclasses/applicative.html
   def main(args: Array[String]): Unit = {
+    implicit val aa = new ExistedId
+    implicit val ab = new UniqueName
+    implicit val ac = new SuitableRoles
+
     val success = Right(1)
 
-    val r =
+    val out =
       for {
         a <- Precondition[ExistedId, Option]
-          .isPreserved(None, Set(103l, 4l, 78l, 32l, 8l, 1l), true)
+          .against(None, Set(103l, 4l, 78l, 32l, 8l, 1l))
           .fold(Left(_), { _ => success })
 
         b <- Precondition[SuitableRoles, cats.Id]
-          .isPreserved(Set(1, 7), Set(1, 3, 4, 5, 6, 7, 8))
+          .against(Set(1, 7), Set(1, 3, 4, 5, 6, 7, 8))
           .fold(Left(_), { _ => success })
 
         c <- Precondition[UniqueName, cats.Id]
-          .isPreserved("bkl", Set("b", "c", "d", "e"))
+          .against("bkl", Set("b", "c", "d", "e"))
           .fold(Left(_), { _ => success })
 
         d <- Right(78)
 
-        e <- product(a,b,c,d) { (a: Int, b: Int, c: Int, e: Int) =>
-          Right(a+b+c+e)
+        result <- product(a, b, c, d) { (a: Int, b: Int, c: Int, e: Int) =>
+          Right(a + b + c + e)
         }
-      } yield e
-
-    println(r)
+      } yield result
+    println(out)
   }
 }

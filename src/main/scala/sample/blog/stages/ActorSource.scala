@@ -34,7 +34,7 @@ object ActorSource {
         }
       }))
 
-      val sourceGraph: ActorSource[String] = new ActorSource[String](actor)
+      val sourceGraph: ActorSource = new ActorSource(actor)
       val source: Source[String, _] = Source.fromGraph(sourceGraph)
 
       source.runForeach(msg => {
@@ -52,14 +52,14 @@ object ActorSource {
  A custom graph stage to create a Source using getActorStage
  The end result is being able to send actor messages to a Source, for a stream to react to.
  */
-class ActorSource[T](source: ActorRef) extends GraphStage[SourceShape[String]] {
+class ActorSource(source: ActorRef) extends GraphStage[SourceShape[String]] {
   val out: Outlet[String] = Outlet("MessageSource")
   override val shape: SourceShape[String] = SourceShape(out)
 
   override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
     new GraphStageLogic(shape) with StageLogging {
       lazy val actorStage: StageActor = getStageActor(onMessage)
-      val buffer  = mutable.Queue[T]()
+      val buffer  = mutable.Queue[String]()
 
       setHandler(out, new OutHandler {
         override def onPull(): Unit = {
@@ -82,16 +82,13 @@ class ActorSource[T](source: ActorRef) extends GraphStage[SourceShape[String]] {
       }
 
       private def onMessage(x: (ActorRef, Any)): Unit = {
-        x match {
-          case (_, msg: T) =>
-            if(msg.isInstanceOf[T]) {
-              log.info("received msg, queueing: {} ", msg)
-              buffer enqueue msg
-              tryToPush()
-            } else {
-              //completeStage()
-              failStage(throw new Exception(s"Unexpected message type ${msg.getClass.getSimpleName}"))
-            }
+        x._2 match {
+          case msg: String =>
+            log.info("received msg, queueing: {} ", msg)
+            buffer enqueue msg
+            tryToPush()
+          case other =>
+            failStage(throw new Exception(s"Unexpected message type ${other.getClass.getSimpleName}"))
         }
       }
     }
