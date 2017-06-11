@@ -1,7 +1,8 @@
-package sample.blog
+package sample.blog.stages
 
 import akka.stream.stage.{GraphStage, GraphStageLogic, InHandler, OutHandler}
 import akka.stream.{Attributes, FlowShape, Inlet, Outlet}
+
 import scala.collection.mutable
 
 //http://doc.akka.io/docs/akka/2.5/scala/stream/stream-customize.html#Integration_with_actors

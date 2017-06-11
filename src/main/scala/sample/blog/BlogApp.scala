@@ -12,7 +12,7 @@ import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
 import akka.persistence.query.PersistenceQuery
 import akka.stream.scaladsl.{GraphDSL, Keep, Sink, Source, ZipWith}
 import akka.stream._
-import com.datastax.driver.core.{Cluster, Session}
+import com.datastax.driver.core.{Cluster, Session, SocketOptions}
 import com.typesafe.config.ConfigFactory
 import sample.blog.PsJournal.LastSeen
 
@@ -146,6 +146,8 @@ object BlogApp {
 
       val client = com.datastax.driver.core.Cluster.builder
         .addContactPointsWithPorts(cp.asJava)
+        //http://docs.datastax.com/en/developer/java-driver/3.2/manual/socket_options/
+        .withSocketOptions(new SocketOptions().setConnectTimeoutMillis(2000))
         .build
 
       changes(client, keySpace, table, Roland, 0l, partitionSize, pageSize, 10.seconds)

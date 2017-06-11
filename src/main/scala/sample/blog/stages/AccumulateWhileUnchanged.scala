@@ -1,4 +1,4 @@
-package sample.blog
+package sample.blog.stages
 
 import akka.stream.stage.{GraphStage, GraphStageLogic, InHandler, OutHandler}
 import akka.stream.{Attributes, FlowShape, Inlet, Outlet}
