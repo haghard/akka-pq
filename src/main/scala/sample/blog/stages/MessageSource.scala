@@ -35,7 +35,7 @@ object MessageSource {
         }
       }))
 
-      val sourceGraph: MessageSource = new MessageSource(sourceFeeder)
+      val sourceGraph: MessageSource[String] = new MessageSource[String](sourceFeeder)
       val source: Source[String, _] = Source.fromGraph(sourceGraph)
 
       source.runForeach(msg => {
@@ -53,14 +53,14 @@ object MessageSource {
  A custom graph stage to create a Source using getActorStage
  The end result is being able to send actor messages to a Source, for a stream to react to.
  */
-class MessageSource(sourceFeeder: ActorRef) extends GraphStage[SourceShape[String]] {
+class MessageSource[T](sourceFeeder: ActorRef) extends GraphStage[SourceShape[String]] {
   val out: Outlet[String] = Outlet("MessageSource")
   override val shape: SourceShape[String] = SourceShape(out)
 
   override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
     new GraphStageLogic(shape) with StageLogging {
       lazy val self: StageActor = getStageActor(onMessage)
-      var messages: Queue[String] = Queue()
+      var messages: Queue[T] = Queue()
 
       setHandler(out, new OutHandler {
         override def onPull(): Unit = {
@@ -73,7 +73,7 @@ class MessageSource(sourceFeeder: ActorRef) extends GraphStage[SourceShape[Strin
         if (isAvailable(out) && messages.nonEmpty) {
           log.info("ready to dequeue")
           messages.dequeue match {
-            case (msg: String, newQueue: Queue[String]) =>
+            case (msg: String, newQueue: Queue[T]) =>
               log.info("got message from queue, pushing: {} ", msg)
               push(out, msg)
               messages = newQueue
@@ -88,10 +88,12 @@ class MessageSource(sourceFeeder: ActorRef) extends GraphStage[SourceShape[Strin
 
       private def onMessage(x: (ActorRef, Any)): Unit = {
         x match {
-          case (_, msg: String) =>
+          case (_, msg: T) =>
             log.info("received msg, queueing: {} ", msg)
             messages = messages.enqueue(msg)
             pump()
+          case (_, msg) =>
+            throw new Exception("Unexpected message type")
         }
       }
     }
