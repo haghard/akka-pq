@@ -14,7 +14,7 @@ object InvariantsDsl {
     def apply[F[_]](implicit F: Check[F]): F[T]
   }
 
-  trait PreconditionDsl {
+  trait PreconditionDsl { self =>
     def uniqueName(in: String, state: Set[String]) = new Dsl[Either[String, String]] {
       override def apply[F[_]](implicit F: Check[F]): F[Either[String, String]] = F.uniqueName(in, state)
     }
@@ -23,10 +23,14 @@ object InvariantsDsl {
       override def apply[F[_]](implicit F: Check[F]): F[Either[Long, Long]] = F.existedId(in, state)
     }
 
-    def both[A, B](l: Dsl[Either[A,A]], r: Dsl[Either[B,B]]): Dsl[Either[String, (A, B)]] = new Dsl[Either[String, (A, B)]] {
+    def and[A, B](l: Dsl[Either[A,A]], r: Dsl[Either[B,B]]): Dsl[Either[String, (A, B)]] = new Dsl[Either[String, (A, B)]] {
       override def apply[F[_]](implicit F: Check[F]): F[Either[String, (A, B)]] = {
         F.both[A,B](l.apply[F], r.apply[F])
       }
+    }
+
+    implicit class PreconditionDslOpts[A, B](dslL: Dsl[Either[A,A]]) {
+      def &&(dslR: Dsl[Either[B, B]]): Dsl[Either[String, (A, B)]] = self.and(dslL, dslR)
     }
   }
 
@@ -50,6 +54,9 @@ object InvariantsDsl {
   object Preconditions extends PreconditionDsl
   import Preconditions._
 
-  val exp = both(uniqueName("a",  Set("a","b","c")), existedId(1l, Set(2,3,4,5,6,7)))
+  //val exp = and(uniqueName("a",  Set("a","b","c")), existedId(1l, Set(2,3,4,5,6,7)))
+
+  val exp = uniqueName("a",  Set("a","b","c")) && (existedId(1l, Set(2,3,4,5,6,7)))
+
   exp(interp)
 }
