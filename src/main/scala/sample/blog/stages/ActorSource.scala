@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory
 import sample.blog.stages.ActorSource.InstallActorRef
 
 import scala.collection.immutable.Queue
+import scala.collection.mutable
 
 object ActorSource {
   case class InstallActorRef(actorRef: ActorRef)
@@ -58,7 +59,7 @@ class ActorSource[T](source: ActorRef) extends GraphStage[SourceShape[String]] {
   override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
     new GraphStageLogic(shape) with StageLogging {
       lazy val actorStage: StageActor = getStageActor(onMessage)
-      var buffer: Queue[T] = Queue()
+      val buffer  = mutable.Queue[T]()
 
       setHandler(out, new OutHandler {
         override def onPull(): Unit = {
@@ -70,12 +71,8 @@ class ActorSource[T](source: ActorRef) extends GraphStage[SourceShape[String]] {
       private def pump(): Unit = {
         if (isAvailable(out) && buffer.nonEmpty) {
           log.info("ready to dequeue")
-          buffer.dequeue match {
-            case (msg: String, newBuffer: Queue[T]) =>
-              log.info("got message from queue, pushing: {} ", msg)
-              push(out, msg)
-              buffer = newBuffer
-          }
+          val bufferedElem = buffer.dequeue()
+          push(out, bufferedElem)
         }
       }
 
@@ -87,11 +84,14 @@ class ActorSource[T](source: ActorRef) extends GraphStage[SourceShape[String]] {
       private def onMessage(x: (ActorRef, Any)): Unit = {
         x match {
           case (_, msg: T) =>
-            log.info("received msg, queueing: {} ", msg)
-            buffer = buffer.enqueue(msg)
-            pump()
-          case (_, msg) =>
-            throw new Exception("Unexpected message type")
+            if(msg.isInstanceOf[T]) {
+              log.info("received msg, queueing: {} ", msg)
+              buffer enqueue msg
+              pump()
+            } else {
+              //completeStage()
+              failStage(throw new Exception(s"Unexpected message type ${msg.getClass.getSimpleName}"))
+            }
         }
       }
     }
