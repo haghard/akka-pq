@@ -64,14 +64,14 @@ class ActorSource[T](source: ActorRef) extends GraphStage[SourceShape[String]] {
       setHandler(out, new OutHandler {
         override def onPull(): Unit = {
           log.info("onPull() called...")
-          pump()
+          tryToPush()
         }
       })
 
-      private def pump(): Unit = {
+      private def tryToPush(): Unit = {
         if (isAvailable(out) && buffer.nonEmpty) {
           log.info("ready to dequeue")
-          val bufferedElem = buffer.dequeue()
+          val bufferedElem = buffer.dequeue
           push(out, bufferedElem)
         }
       }
@@ -87,7 +87,7 @@ class ActorSource[T](source: ActorRef) extends GraphStage[SourceShape[String]] {
             if(msg.isInstanceOf[T]) {
               log.info("received msg, queueing: {} ", msg)
               buffer enqueue msg
-              pump()
+              tryToPush()
             } else {
               //completeStage()
               failStage(throw new Exception(s"Unexpected message type ${msg.getClass.getSimpleName}"))
