@@ -132,14 +132,22 @@ object Invariants {
 
     val success = Right(1)
 
+    /*def eitherMonad[T]: cats.Monad[({type λ[α] = Either[T, α]})#λ] =
+      new cats.Monad[({type λ[α] = Either[T, α]})#λ] {
+        def unit[A](a: => A): Either[T, A] = Right(a)
+        def flatMap[A,B](eea: Either[T, A])(f: A => Either[T, B]) = eea match {
+          case Right(a) => f(a)
+          case Left(e) => Left(e)
+        }
+      }
+      */
+
     val out =
       for {
-        a <- Precondition[ExistedId, Option]
-          .against(None, Set(103l, 4l, 78l, 32l, 8l, 1l))
+        a <- Precondition[ExistedId, Option].against(None, Set(103l, 4l, 78l, 32l, 8l, 1l))
           .fold(Left(_), { _ => success })
 
-        b <- Precondition[SuitableRoles, cats.Id]
-          .against(Set(1, 7), Set(1, 3, 4, 5, 6, 7, 8))
+        b <- Precondition[SuitableRoles, cats.Id].against(Set(1, 7), Set(1, 3, 4, 5, 6, 7, 8))
           .fold(Left(_), { _ => success })
 
         c <- Precondition[UniqueName, cats.Id]

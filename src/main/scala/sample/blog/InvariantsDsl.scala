@@ -45,8 +45,8 @@ object InvariantsDsl {
     }
 
     override def both[A, B](l: Id[Either[A, A]], r: Id[Either[B, B]]): Id[Either[String, (A, B)]] = {
-      l.fold({ a => Left("error :" + a) }, { a =>
-        r.fold({ b => Left("error : "  + b) }, { b => Right((a,b)) })
+      l.fold({ failedInputL => Left("error :" + failedInputL) }, { a =>
+        r.fold({ failedInputR => Left("error : "  + failedInputR) }, { b => Right((a,b)) })
       })
     }
   }
@@ -56,7 +56,7 @@ object InvariantsDsl {
 
   //val exp = and(uniqueName("a",  Set("a","b","c")), existedId(1l, Set(2,3,4,5,6,7)))
 
-  val exp = uniqueName("a",  Set("a","b","c")) && (existedId(1l, Set(2,3,4,5,6,7)))
+  val exp = uniqueName("a",  Set("a","b","c")) && existedId(1l, Set(2,3,4,5,6,7))
 
   exp(interp)
 }
