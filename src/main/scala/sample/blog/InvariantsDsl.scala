@@ -40,8 +40,7 @@ object InvariantsDsl {
       if(!r) Right(in) else Left(in)
     }
     override def existedId(in: Long, state: Set[Long]): Id[Either[Long, Long]] = {
-      val r = state.contains(in)
-      if(r) Right(in) else Left(in)
+      if(state.contains(in)) Right(in) else Left(in)
     }
 
     override def both[A, B](l: Id[Either[A, A]], r: Id[Either[B, B]]): Id[Either[String, (A, B)]] = {
@@ -53,8 +52,6 @@ object InvariantsDsl {
 
   object Preconditions extends PreconditionDsl
   import Preconditions._
-
-  //val exp = and(uniqueName("a",  Set("a","b","c")), existedId(1l, Set(2,3,4,5,6,7)))
 
   val exp = uniqueName("a",  Set("a","b","c")) && existedId(1l, Set(2,3,4,5,6,7))
 

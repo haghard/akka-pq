@@ -3,21 +3,18 @@ package sample.blog
 import java.net.InetSocketAddress
 import java.util.UUID
 
-import akka.Done
-import akka.actor.{ActorSystem, Props}
-import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
-import akka.event.LoggingAdapter
+import akka.actor.ActorSystem
 import akka.persistence.cassandra.CassandraMetricsRegistry
 import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
 import akka.persistence.query.PersistenceQuery
-import akka.stream.scaladsl.{GraphDSL, Keep, Sink, Source, ZipWith}
+import akka.stream.scaladsl.{Keep, Sink}
 import akka.stream._
-import com.datastax.driver.core.{Cluster, Session, SocketOptions}
+import com.datastax.driver.core.{Cluster, SocketOptions}
 import com.typesafe.config.ConfigFactory
 import sample.blog.PsJournal.LastSeen
 
 import scala.collection.immutable
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.Await
 import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.util.{Failure, Success}
 
@@ -61,7 +58,7 @@ object BlogApp {
 
   import shapeless.HList
 
-  class RecordH[H <: HList](hs: H)
+  class RecordH[H <: HList](val hs: H)
 
   object RecordH {
     def apply[A](a: A) = new RecordH(a :: shapeless.HNil)
@@ -80,7 +77,11 @@ object BlogApp {
 
     def apply[P <: Product, L <: HList](p: P)(implicit gen: Generic.Aux[P, L]) = new RecordH[L](gen to p)
   }
-
+  
+  val list = RecordH(1, "", true).hs
+  list(0)
+  list(1)
+  list(2)
 
   def main(args: Array[String]): Unit = {
     if (args.isEmpty) startup(Seq("2551", "2552", "0"))
@@ -112,7 +113,6 @@ object BlogApp {
   case class Tick()
 
   def startup(ports: Seq[String]): Unit = {
-
     ports foreach { port =>
       // Override the configuration of the port
       val config = ConfigFactory.parseString("akka.remote.netty.tcp.port=" + port)
@@ -152,7 +152,6 @@ object BlogApp {
 
       changes(client, keySpace, table, Roland, 0l, partitionSize, pageSize, 10.seconds)
       //changes2(Roland, 0l, 10.seconds)
-
 
 /*
       val authorListingRegion = ClusterSharding(system).start(

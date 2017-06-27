@@ -1,7 +1,8 @@
 import com.typesafe.sbt.SbtMultiJvm
 import com.typesafe.sbt.SbtMultiJvm.MultiJvmKeys.MultiJvm
 
-val akkaVersion = "2.5.2"
+val akkaVersion = "2.5.3"
+val akkaHttpVersion = "10.0.9"
 
 val project = Project(
   id = "akka-pq",
@@ -15,9 +16,11 @@ val project = Project(
       "com.typesafe.akka" %%  "akka-cluster-sharding" % akkaVersion,
       "com.typesafe.akka" %%  "akka-persistence-cassandra" % "0.53",
       "com.typesafe.akka" %%  "akka-stream"    % akkaVersion,
+      "com.typesafe.akka" %%  "akka-http"      % akkaHttpVersion,
       "org.hdrhistogram"  %   "HdrHistogram"      % "2.1.9",
       "com.chuusai"       %%  "shapeless"         %  "2.3.2",
       "org.typelevel"     %%  "cats"              %  "0.9.0",
+      "net.cakesolutions" %%  "validated-config"  %  "1.0.1",
       "com.typesafe.akka" %%  "akka-multi-node-testkit" % akkaVersion,
       //"org.iq80.leveldb" % "leveldb" % "0.7",
       //"org.fusesource.leveldbjni" % "leveldbjni-all" % "1.8",

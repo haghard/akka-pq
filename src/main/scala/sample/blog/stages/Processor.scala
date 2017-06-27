@@ -9,15 +9,17 @@ import scala.collection.mutable
 
 /*
  Rate decoupled graph stages
- Sometimes it is desirable to decouple the rate of the upstream and downstream of a stage, synchronizing only when needed.
+ Sometimes it is desirable to decouple the rate of the upstream and downstream of a stage, synchronizing only when
+ needed.
 
- This is achieved in the model by representing a GraphStage as a boundary between two regions where the demand sent upstream
- is decoupled from the demand that arrives from downstream. One immediate consequence of this difference is that an onPush call does
- not always lead to calling push and an onPull call does not always lead to calling pull.
+ This is achieved in the model by representing a GraphStage as a boundary between two regions where the demand sent
+ upstream is decoupled from the demand that arrives from downstream. One immediate consequence of this difference
+ is that an onPush call does not always lead to calling push and an onPull call does not always lead to calling pull
 
- One of the important use-case for this is to build buffer-like entities, that allow independent progress of upstream and downstream stages when the buffer is not full or empty, and slowing down the appropriate side if the buffer becomes empty or full.
+ One of the important use-case for this is to build buffer-like entities, that allow independent progress of upstream
+ and downstream stages when the buffer is not full or empty, and slowing down the appropriate side if the buffer
+ becomes empty or full.
 */
-//ActorPub and ActorSub analogy
 final class Processor[A] extends GraphStage[FlowShape[A, A]] {
   val in = Inlet[A]("TwoBuffer.in")
   val out = Outlet[A]("TwoBuffer.out")
