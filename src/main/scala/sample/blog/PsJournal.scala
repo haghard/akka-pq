@@ -28,8 +28,8 @@ Links:
 */
 
 /*
-http://doc.akka.io/docs/akka/2.5.2/scala/stream/stream-customize.html
-A few simple guarantees.
+http://doc.akka.io/docs/akka/2.5.4/scala/stream/stream-customize.html
+Thread safety of custom processing stages.
   The callbacks are never called concurrently.
   The state encapsulated can be safely modified from the provided callbacks, without any further synchronization.
 */
@@ -41,8 +41,8 @@ A few simple guarantees.
  * Taken from https://github.com/akka/alpakka/blob/master/cassandra/src/main/scala/akka/stream/alpakka/cassandra/CassandraSourceStage.scala
  * and adapted with respect to akka-cassandra-persistence schema
  */
-final class PsJournal(client: Cluster, keySpace: String, journal: String, persistenceId: String, offset: Long, partitionSize: Long,
-  /*log: LoggingAdapter,*/ pageSize: Int) extends GraphStage[SourceShape[Row]] {
+final class PsJournal(client: Cluster, keySpace: String, journal: String, persistenceId: String, offset: Long,
+  partitionSize: Long, pageSize: Int) extends GraphStage[SourceShape[Row]] {
   val out: Outlet[Row] = Outlet[Row](akka.event.Logging.simpleName(this) + ".out")
 
   private val retryTimeout = 10000
@@ -94,7 +94,7 @@ final class PsJournal(client: Cluster, keySpace: String, journal: String, persis
       var sequenceNr = offset
       var partitionIter = Option.empty[ResultSet]
       var onMessageCallback: AsyncCallback[Try[ResultSet]] = _
-      val session = tryToConnect(Int.MaxValue)(log, client.connect(keySpace))
+      val session = tryToConnect(Int.MaxValue)(log, (client connect keySpace))
       val preparedStmt = session.prepare(queryByPersistenceId)
 
       override def preStart(): Unit = {

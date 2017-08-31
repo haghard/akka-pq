@@ -35,7 +35,7 @@ class Bot extends Actor with ActorLogging {
 
   val create: Receive = {
     case Tick =>
-      val postId = UUID.randomUUID().toString
+      val postId = UUID.randomUUID.toString
       n += 1
       val title = s"Post $n from $from"
       postRegion ! Post.AddPost(postId, Post.PostContent(currentAuthor, title, "..."))

@@ -2,14 +2,13 @@ package sample.blog
 
 import java.io.File
 import java.util.UUID
+
 import scala.concurrent.duration._
 import org.apache.commons.io.FileUtils
 import com.typesafe.config.ConfigFactory
-import akka.actor.ActorIdentity
-import akka.actor.Identify
-import akka.actor.Props
+import akka.actor.{ActorIdentity, Identify, Props}
 import akka.cluster.Cluster
-import akka.cluster.sharding.{ClusterShardingSettings, ClusterSharding}
+import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
 import akka.persistence.Persistence
 import akka.persistence.journal.leveldb.SharedLeveldbJournal
 import akka.persistence.journal.leveldb.SharedLeveldbStore
@@ -18,27 +17,37 @@ import akka.remote.testkit.MultiNodeConfig
 import akka.remote.testkit.MultiNodeSpec
 import akka.testkit.ImplicitSender
 
+//multi-jvm:test
 object BlogSpec extends MultiNodeConfig {
   val controller = role("controller")
   val node1 = role("node1")
   val node2 = role("node2")
 
   commonConfig(ConfigFactory.parseString("""
-    akka.cluster.metrics.enabled=off
-    akka.actor.provider = "akka.cluster.ClusterActorRefProvider"
-    akka.persistence.journal.plugin = "akka.persistence.journal.leveldb-shared"
-    akka.persistence.journal.leveldb-shared.store {
-      native = off
-      dir = "target/test-shared-journal"
-    }
-    akka.persistence.snapshot-store.plugin = "akka.persistence.snapshot-store.local"
-    akka.persistence.snapshot-store.local.dir = "target/test-snapshots"
-    """))
+  |cassandra-dispatcher {
+  |  type = Dispatcher
+  |  executor = "fork-join-executor"
+  |  fork-join-executor {
+  |    parallelism-min = 2
+  |    parallelism-max = 8
+  |  }
+  |}
+  |  akka.cluster.metrics.enabled=off
+  |  akka.actor.provider = "akka.cluster.ClusterActorRefProvider"
+  |  akka.persistence.journal.plugin = "akka.persistence.journal.leveldb-shared"
+  |  akka.persistence.journal.leveldb-shared.store {
+  |    native = off
+  |    dir = "target/test-shared-journal"
+  |  }
+  |  akka.persistence.snapshot-store.plugin = "akka.persistence.snapshot-store.local"
+  |  akka.persistence.snapshot-store.local.dir = "target/test-snapshots"
+  """.stripMargin))
 }
 
 class BlogSpecMultiJvmNode1 extends BlogSpec
 class BlogSpecMultiJvmNode2 extends BlogSpec
 class BlogSpecMultiJvmNode3 extends BlogSpec
+
 
 class BlogSpec extends MultiNodeSpec(BlogSpec)
   with STMultiNodeSpec with ImplicitSender {
@@ -158,6 +167,5 @@ class BlogSpec extends MultiNodeSpec(BlogSpec)
       }
       enterBarrier("after-4")
     }
-
   }
 }

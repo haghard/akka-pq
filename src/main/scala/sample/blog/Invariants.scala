@@ -77,13 +77,9 @@ object Invariants {
           val success: Either[String, F[T]] = Right(in)
           println(B.name)
           if (ignoreIfAbsent)
-            C.cata(in)(success, { input =>
-              if (B(input, state)) success else Left(B.errorMessage(input, state))
-            })
+            C.cata(in)(success, { input => if (B(input, state)) success else Left(B.errorMessage(input, state)) })
           else
-            C.cata(in)(Left(B.emptyInputMessage), { input =>
-              if (B(input, state)) success else Left(B.errorMessage(input, state))
-            })
+            C.cata(in)(Left(B.emptyInputMessage), { input => if (B(input, state)) success else Left(B.errorMessage(input, state)) })
         }
       }
     }
