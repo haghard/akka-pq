@@ -24,24 +24,24 @@ object BlogSpec extends MultiNodeConfig {
   val node2 = role("node2")
 
   commonConfig(ConfigFactory.parseString("""
-  |cassandra-dispatcher {
-  |  type = Dispatcher
-  |  executor = "fork-join-executor"
-  |  fork-join-executor {
-  |    parallelism-min = 2
-  |    parallelism-max = 8
-  |  }
-  |}
-  |  akka.cluster.metrics.enabled=off
-  |  akka.actor.provider = "akka.cluster.ClusterActorRefProvider"
-  |  akka.persistence.journal.plugin = "akka.persistence.journal.leveldb-shared"
-  |  akka.persistence.journal.leveldb-shared.store {
-  |    native = off
-  |    dir = "target/test-shared-journal"
-  |  }
-  |  akka.persistence.snapshot-store.plugin = "akka.persistence.snapshot-store.local"
-  |  akka.persistence.snapshot-store.local.dir = "target/test-snapshots"
-  """.stripMargin))
+    |cassandra-dispatcher {
+    |  type = Dispatcher
+    |  executor = "fork-join-executor"
+    |  fork-join-executor {
+    |    parallelism-min = 2
+    |    parallelism-max = 8
+    |  }
+    |}
+    |  akka.cluster.metrics.enabled=off
+    |  akka.actor.provider = "akka.cluster.ClusterActorRefProvider"
+    |  akka.persistence.journal.plugin = "akka.persistence.journal.leveldb-shared"
+    |  akka.persistence.journal.leveldb-shared.store {
+    |    native = off
+    |    dir = "target/test-shared-journal"
+    |  }
+    |  akka.persistence.snapshot-store.plugin = "akka.persistence.snapshot-store.local"
+    |  akka.persistence.snapshot-store.local.dir = "target/test-snapshots"
+    """.stripMargin))
 }
 
 class BlogSpecMultiJvmNode1 extends BlogSpec
