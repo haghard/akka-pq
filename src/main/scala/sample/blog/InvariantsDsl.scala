@@ -1,59 +1,112 @@
 package sample.blog
+
 import cats.Id
 
-
+// import sample.blog.InvariantsDsl
 object InvariantsDsl {
 
-  trait Check[F[_]] {
-    def uniqueName(in: String, state: Set[String]): F[Either[String, String]]
-    def existedId(in: Long, state: Set[Long]): F[Either[Long, Long]]
-    def both[A,B](l: F[Either[A,A]], r: F[Either[B,B]]): F[Either[String, (A, B)]]
+  type Out[T] = Either[String, T]
+  //Finally Tagless
+
+  trait CheckOps[F[_]] {
+    def and[A, B](l: F[Out[A]], r: F[Out[B]]): F[Out[(A, B)]]
+    def or[A, B](l: F[Out[A]], r: F[Out[B]]): F[Out[A Either B]]
   }
 
-  trait Dsl[T] {
+  trait Check[F[_]] extends CheckOps[F] {
+    def inSet[T](in: T, state: Set[T]): F[Out[T]]
+    def maybeInSet[T](in: Option[T], state: Set[T]): F[Out[T]]
+    def inMap[T](in: T, state: Map[T, _]): F[Out[T]]
+    def maybeInMap[T](in: Option[T], state: Map[T, _]): F[Out[T]]
+  }
+
+  trait DslElement[T] {
     def apply[F[_]](implicit F: Check[F]): F[T]
   }
 
-  trait PreconditionDsl { self =>
-    def uniqueName(in: String, state: Set[String]) = new Dsl[Either[String, String]] {
-      override def apply[F[_]](implicit F: Check[F]): F[Either[String, String]] = F.uniqueName(in, state)
+  trait CheckProdDsl {  self =>
+    def uniqueProductName[T](in: T, state: Set[T]) = new DslElement[Out[T]] {
+      override def apply[F[_]](implicit C: Check[F]): F[Out[T]] = C.inSet[T](in, state)
     }
 
-    def existedId(in: Long, state: Set[Long]) = new Dsl[Either[Long, Long]] {
-      override def apply[F[_]](implicit F: Check[F]): F[Either[Long, Long]] = F.existedId(in, state)
-    }
-
-    def and[A, B](l: Dsl[Either[A,A]], r: Dsl[Either[B,B]]): Dsl[Either[String, (A, B)]] = new Dsl[Either[String, (A, B)]] {
-      override def apply[F[_]](implicit F: Check[F]): F[Either[String, (A, B)]] = {
-        F.both[A,B](l.apply[F], r.apply[F])
-      }
-    }
-
-    implicit class PreconditionDslOpts[A, B](dslL: Dsl[Either[A,A]]) {
-      def &&(dslR: Dsl[Either[B, B]]): Dsl[Either[String, (A, B)]] = self.and(dslL, dslR)
+    def knownProductOpt[F[_], T](in: Option[T], state: Map[T, _]) = new DslElement[Out[T]] {
+      override def apply[F[_]](implicit C: Check[F]): F[Out[T]] = C.maybeInMap[T](in, state)
     }
   }
 
-  val interp = new Check[cats.Id] {
-    override def uniqueName(in: String, state: Set[String]): Id[Either[String, String]] = {
-      val r = state.contains(in)
-      if(!r) Right(in) else Left(in)
-    }
-    override def existedId(in: Long, state: Set[Long]): Id[Either[Long, Long]] = {
-      if(state.contains(in)) Right(in) else Left(in)
+  trait CheckSpecDsl {  self =>
+    def uniqueSpec[T](in: T, state: Set[T]) = new DslElement[Out[T]] {
+      override def apply[F[_]](implicit C: Check[F]): F[Out[T]] = C.inSet[T](in, state)
     }
 
-    override def both[A, B](l: Id[Either[A, A]], r: Id[Either[B, B]]): Id[Either[String, (A, B)]] = {
-      l.fold({ failedInputL => Left("error :" + failedInputL) }, { a =>
-        r.fold({ failedInputR => Left("error : "  + failedInputR) }, { b => Right((a,b)) })
+    def knownSpec[T](in: T, state: Map[T, _]) = new DslElement[Out[T]] {
+      override def apply[F[_]](implicit C: Check[F]): F[Out[T]] = C.inMap[T](in, state)
+    }
+
+    def knownSpecOpt[F[_], T](in: Option[T], state: Map[T, _]) = new DslElement[Out[T]] {
+      override def apply[F[_]](implicit C: Check[F]): F[Out[T]] = C.maybeInMap[T](in, state)
+    }
+  }
+
+  trait BasicDsl { self =>
+
+    def and[A, B](l: DslElement[Out[A]], r: DslElement[Out[B]]) = new DslElement[Out[(A, B)]] {
+      override def apply[F[_]](implicit C: Check[F]): F[Out[(A, B)]] =
+        C.and[A, B](l.apply[F], r.apply[F])
+    }
+
+    def or[A, B](l: DslElement[Out[A]], r: DslElement[Out[B]]) = new DslElement[Out[A Either B]] {
+      override def apply[F[_]](implicit C: Check[F]): F[Out[A Either B]] =
+        C.or[A, B](l.apply[F], r.apply[F])
+    }
+
+    implicit class PreconditionDslOpts[A, B](dslL: DslElement[Out[A]]) {
+      def &&(dslR: DslElement[Out[B]]): DslElement[Out[(A, B)]] = self.and(dslL, dslR)
+      def or(dslR: DslElement[Out[B]]): DslElement[Out[A Either B]] = self.or(dslL, dslR)
+    }
+  }
+
+  trait IdentityCheck extends Check[cats.Id] {
+    override def and[A, B](l: Id[Out[A]], r: Id[Out[B]]): Id[Out[(A, B)]] =
+      l.fold(Left(_), { la =>
+        r.fold(Left(_), (rb => Right((la, rb))))
       })
+
+    override def or[A, B](l: Id[Out[A]], r: Id[Out[B]]): Id[Out[A Either B]] =
+      l.fold({ lf =>
+        r.fold({ rf => Left(s"both [$lf and $rf] failed")}, (b => Right(Right(b))))
+      },(a => Right(Left(a))))
+  }
+
+  val interp = new IdentityCheck {
+    override def inSet[T](in: T, state: Set[T]): Id[Out[T]] = {
+      if (state.contains(in)) Right(in)
+      else Left(s"$in doesn't exist in the set")
+    }
+
+    override def inMap[T](in: T, state: Map[T, _]): Id[Out[T]] = {
+      state.get(in).fold[Out[T]](Left(s"$in doesn't exist in the map")){ _ => Right(in) }
+    }
+
+    override def maybeInMap[T](in: Option[T], state: Map[T, _]): Id[Out[T]] = {
+      in.fold[Out[T]](Right(in.asInstanceOf[T])) { inMap(_, state) }
+    }
+
+    override def maybeInSet[T](in: Option[T], state: Set[T]) = {
+      in.fold[Out[T]](Right(in.asInstanceOf[T])) { inSet(_, state) }
     }
   }
 
-  object Preconditions extends PreconditionDsl
+  object Preconditions extends BasicDsl with CheckProdDsl with CheckSpecDsl
   import Preconditions._
 
-  val exp = uniqueName("a",  Set("a","b","c")) && existedId(1l, Set(2,3,4,5,6,7))
+  val expAnd = ((uniqueProductName("a1", Set("a", "b", "c")) && uniqueSpec(2l, Set(2l, 3l, 4l, 5l, 6l, 7l)))
+                      or knownSpec(8l, Map(2l -> "a", 3l -> "b")))
+  expAnd(interp)
 
-  exp(interp)
+  knownSpecOpt(Some(8l), Map(2l -> "a", 18l -> "b"))(interp)
+  knownProductOpt(Some(1), Map(1 -> "prod_a", 18 -> "prod_b"))(interp)
+
+  val expOr = uniqueProductName("a", Set("a", "b", "c")) or knownSpec(8l, Map(2l -> "a", 3l -> "b"))
+  expOr(interp)
 }

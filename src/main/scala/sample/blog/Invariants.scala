@@ -14,36 +14,37 @@ object Invariants {
       for {a <- fa; f <- ff} yield f(a)
   }
 
-  trait BooleanLogicCheck[In, State] {
+  trait Check[Input, State] {
     def name: String
-
-    def apply(in: In, on: State): Boolean
-
-    def errorMessage(in: In, state: State): String
-
-    def emptyInputMessage = s"Empty input while checking $name"
+    def apply(in: Input, on: State): Boolean
+    def errorMessage(in: Input, state: State): String
+    def emptyInputMessage = s"Empty input while checking binary logic thing $name"
   }
 
   sealed trait Precondition[F[_]] {
-    def ignoreIfAbsent: Boolean
-    def against[T, State](fa: F[T], state: State/*, ignoreNull: Boolean = false*/)
-      (implicit P: BooleanLogicCheck[T, State], C: Catamorphism[F]): Either[String, F[T]]
+    def ignoreIfEmpty: Boolean
+    def input[T, State](fa: F[T], state: State)(implicit CH: Check[T, State], C: Catamorphism[F]): Either[String, F[T]]
   }
 
-  class ExistedId extends BooleanLogicCheck[Long, Set[Long]] {
-    override val name = "Precondition: KnownId"
+  class ExistedId extends Check[Long, Set[Long]] {
+    override val name = "Precondition: ExistedId"
     override def apply(in: Long, on: Set[Long]): Boolean = on.contains(in)
     override def errorMessage(in: Long, on: Set[Long]) = s"$in doesn't exists"
   }
 
-  class UniqueName extends BooleanLogicCheck[String, Set[String]] {
+  class NameIsUnique extends Check[String, Set[String]] {
     override val name = "Precondition: UniqueName"
     override def apply(in: String, state: Set[String]): Boolean = !state.contains(name)
     override def errorMessage(name: String, state: Set[String]) = s"$name is not unique"
   }
 
+  class ContainsKey extends Check[Long, Map[Long, String]] {
+    override val name = "Precondition: ContainsKey"
+    override def apply(in: Long, state: Map[Long, String]): Boolean = state.get(in).isDefined
+    override def errorMessage(in: Long, state: Map[Long, String]) = s"key $in is known"
+  }
 
-  class SuitableRoles extends BooleanLogicCheck[Set[Int], Set[Int]] {
+  class HasRoles extends Check[Set[Int], Set[Int]] {
     override val name = "Precondition: HasRoles"
     override def apply(ids: Set[Int], state: Set[Int]) = ids.filter(id => !state.contains(id)).isEmpty
     override def errorMessage(ids: Set[Int], state: Set[Int]) = s"User with roles [${ids.mkString(",")}] is not allowed to do this operation"
@@ -67,27 +68,30 @@ object Invariants {
     ): Either[String, cats.Id[A]] = if (opt == null) ifNull else ifNotNull(opt)
   }
 
+  //: cats.Applicative
   object Precondition {
-    //: cats.Applicative
-    private def create[T <: BooleanLogicCheck[_, _] : ClassTag, F[_]](ignore: Boolean) = {
+    private def create[T <: Check[_, _] : ClassTag, F[_]](ignore: Boolean) = {
       new Precondition[F] {
-        override val ignoreIfAbsent = ignore
-        override def against[T, State](in: F[T], state: State)
-          (implicit B: BooleanLogicCheck[T, State], C: Catamorphism[F]): Either[String, F[T]] = {
-          val success: Either[String, F[T]] = Right(in)
-          println(B.name)
-          if (ignoreIfAbsent)
+        override val ignoreIfEmpty = ignore
+        override def input[T, State](in: F[T], state: State)
+          (implicit B: Check[T, State], C: Catamorphism[F]): Either[String, F[T]] = {
+          val success: Either[String, F[T]] = Right(in) //we want to return in here !!!
+          if (ignoreIfEmpty) {
             C.cata(in)(success, { input => if (B(input, state)) success else Left(B.errorMessage(input, state)) })
-          else
-            C.cata(in)(Left(B.emptyInputMessage), { input => if (B(input, state)) success else Left(B.errorMessage(input, state)) })
+          } else {
+            C.cata(in)(Left(B.emptyInputMessage), { input =>
+              println(s"${B.name}[input: $input  ->  $state]")
+              if (B(input, state)) success else Left(B.errorMessage(input, state))
+            })
+          }
         }
       }
     }
 
-    def nullable[T <: BooleanLogicCheck[_, _] : ClassTag, F[_]]: Precondition[F] =
+    def ignorable[T <: Check[_, _] : ClassTag, F[_]]: Precondition[F] =
       create(true)
 
-    def apply[T <: BooleanLogicCheck[_, _] : ClassTag, F[_]]: Precondition[F] =
+    def apply[T <: Check[_, _] : ClassTag, F[_]]: Precondition[F] =
       create(false)
   }
 
@@ -123,9 +127,9 @@ object Invariants {
   //http://typelevel.org/cats/typeclasses/applicative.html
   def main(args: Array[String]): Unit = {
     implicit val aa = new ExistedId
-    implicit val ab = new UniqueName
-    implicit val ac = new SuitableRoles
-
+    implicit val ab = new NameIsUnique
+    implicit val ac = new HasRoles
+    implicit val af = new ContainsKey
     val success = Right(1)
 
     /*def eitherMonad[T]: cats.Monad[({type λ[α] = Either[T, α]})#λ] =
@@ -138,24 +142,34 @@ object Invariants {
       }
       */
 
+     /*Precondition[ExistedId, Option].input(Some(1037l), Set(103l, 4l, 78l, 32l, 8l, 1l)).flatMap { a =>
+      Precondition[HasRoles, cats.Id].input(Set(1, 7), Set(1, 3, 4, 5, 6, 7, 8)).map { b =>
+        (a,b)
+      }
+    }*/
+
+    //The whole pipeline stops
     val out =
       for {
-        a <- Precondition[ExistedId, Option].against(None, Set(103l, 4l, 78l, 32l, 8l, 1l))
+        a <- Precondition[ExistedId, Option].input(Some(103l), Set(103l, 4l, 78l, 32l, 8l, 1l))
           .fold(Left(_), { _ => success })
 
-        b <- Precondition[SuitableRoles, cats.Id].against(Set(1, 7), Set(1, 3, 4, 5, 6, 7, 8))
+        b <- Precondition[HasRoles, cats.Id].input(Set(1, 7), Set(1, 3, 4, 5, 6, 7, 8))
           .fold(Left(_), { _ => success })
 
-        c <- Precondition[UniqueName, cats.Id]
-          .against("bkl", Set("b", "c", "d", "e"))
+        c <- Precondition[NameIsUnique, cats.Id].input("bkl", Set("b", "c", "d", "e"))
           .fold(Left(_), { _ => success })
 
-        d <- Right(78)
+        d <- Precondition[ContainsKey, cats.Id].input(5l, Map(5l -> "b", 6l -> "d", 7l -> "e"))
+          .fold(Left(_), { _ => success })
 
-        result <- product(a, b, c, d) { (a: Int, b: Int, c: Int, e: Int) =>
-          Right(a + b + c + e)
+        e <- Right(78)
+
+        result <- product(a, b, c, d, e) { (a: Int, b: Int, c: Int, d: Int, e: Int) =>
+          Right(a + b + c + d + e)
         }
       } yield result
+
     println(out)
   }
 }
