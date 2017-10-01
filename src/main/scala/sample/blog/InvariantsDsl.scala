@@ -109,4 +109,14 @@ object InvariantsDsl {
 
   val expOr = uniqueProductName("a", Set("a", "b", "c")) or knownSpec(8l, Map(2l -> "a", 3l -> "b"))
   expOr(interp)
+
+  //ApplicativeError
+  import cats.instances._
+  //scala.util.Try, or maybe a scala.util.Either
+  def find[F[_], T](es: List[T], e: T)(implicit E: cats.ApplicativeError[F, Throwable]): F[T] = {
+    //Try
+    es.find(_ == e)
+      .map(E.pure(_))
+      .getOrElse(E.raiseError(new Exception(s"Could not find $e")))
+  }
 }

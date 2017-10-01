@@ -20,7 +20,7 @@ val project = Project(
       //"com.typesafe.akka" %%  "akka-http"      % akkaHttpVersion,
       //"org.hdrhistogram"  %   "HdrHistogram"      % "2.1.9",
       "com.chuusai"       %%  "shapeless"         %  "2.3.2",
-      "org.typelevel"     %%  "cats"              %  "0.9.0",
+      "org.typelevel"     %%  "cats-core"         %   "1.0.0-MF",
       "com.typesafe.akka" %%  "akka-multi-node-testkit" % akkaVersion,
       "net.cakesolutions" %%  "validated-config"  %  "1.1.2",
       "com.typesafe.akka" %% "akka-distributed-data" % akkaVersion,
