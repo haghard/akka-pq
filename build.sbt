@@ -23,7 +23,9 @@ val project = Project(
       "org.typelevel"     %%  "cats-core"         %   "1.0.0-MF",
       "com.typesafe.akka" %%  "akka-multi-node-testkit" % akkaVersion,
       "net.cakesolutions" %%  "validated-config"  %  "1.1.2",
-      "com.typesafe.akka" %% "akka-distributed-data" % akkaVersion,
+      //"com.typesafe.akka" %% "akka-distributed-data" % akkaVersion,
+      "com.scalapenos"    %%  "stamina-json"      % "0.1.3",
+      "com.slamdata"      %% "matryoshka-core" % "0.18.3",
 
       "org.iq80.leveldb" % "leveldb" % "0.7" % "test",
       "org.fusesource.leveldbjni" % "leveldbjni-all" % "1.8" % "test",

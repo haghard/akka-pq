@@ -15,19 +15,19 @@ object Lang {
     }
   }
   import Type._
-  sealed trait HasType[A <: Type] {
+  sealed trait LangType[A <: Type] {
     def typeOf: A
   }
-  object HasType {
-    def apply[A <: Type](implicit W: HasType[A]): HasType[A] = W
+  object LangType {
+    def apply[A <: Type](implicit W: LangType[A]): LangType[A] = W
 
-    implicit val UnknownHasType: HasType[Unknown] = new HasType[Unknown] {
+    implicit val UnknownHasType: LangType[Unknown] = new LangType[Unknown] {
       def typeOf = Unknown()
     }
-    implicit val IntHasType: HasType[Int] = new HasType[Int] {
+    implicit val IntHasType: LangType[Int] = new LangType[Int] {
       def typeOf = Int()
     }
-    implicit val DecHasType: HasType[Dec] = new HasType[Dec] {
+    implicit val DecHasType: LangType[Dec] = new LangType[Dec] {
       def typeOf = Dec()
     }
   }
@@ -55,7 +55,7 @@ object Lang {
   trait Dataset[A <: Type] { self =>
     def apply[F[_]](implicit F: DatasetOps[F]): F[A]
 
-    def typed[B <: Type: HasType]: Dataset[B] = map(_.typed[B])
+    def typed[B <: Type: LangType]: Dataset[B] = map(_.typed[B])
 
     def map[B <: Type](f: Mapping[A, A] => Mapping[A, B]): Dataset[B] = new Dataset[B] {
       def apply[F[_]: DatasetOps]: F[B] = DatasetOps[F].map(self.apply[F], f(Mapping.id[A]))
@@ -87,8 +87,8 @@ object Lang {
       def apply[F[_]: MappingOps](v: F[A]): F[B] = MappingOps[F].subtract(self(v), that(v))
     }
 
-    def typed[C <: Type: HasType]: Mapping[A, C] = new Mapping[A, C] {
-      def apply[F[_]: MappingOps](v: F[A]): F[C] = MappingOps[F].typed(self(v), HasType[C].typeOf)
+    def typed[C <: Type: LangType]: Mapping[A, C] = new Mapping[A, C] {
+      def apply[F[_]: MappingOps](v: F[A]): F[C] = MappingOps[F].typed(self(v), LangType[C].typeOf)
     }
   }
 
@@ -101,14 +101,12 @@ object Lang {
   trait MappingOps[F[_]] {
     def add[A <: Type: NumberIsh](l: F[A], r: F[A]): F[A]
     def subtract[A <: Type: NumberIsh](l: F[A], r: F[A]): F[A]
-    def typed[A <: Type, B <: Type: HasType](v: F[A], t: B): F[B]
+    def typed[A <: Type, B <: Type: LangType](v: F[A], t: B): F[B]
   }
 
   object MappingOps {
     def apply[F[_]](implicit F: MappingOps[F]): MappingOps[F] = F
   }
-
-  Dataset.empty[Type.Dec].map(_.)
 
   Dataset.load("\\usr\\temp").typed[Type.Int].map { i => i + i }
 }

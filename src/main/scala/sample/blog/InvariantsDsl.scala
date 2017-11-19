@@ -24,7 +24,7 @@ object InvariantsDsl {
     def apply[F[_]](implicit F: Check[F]): F[T]
   }
 
-  trait CheckProdDsl {  self =>
+  trait CheckProdDsl { self =>
     def uniqueProductName[T](in: T, state: Set[T]) = new DslElement[Out[T]] {
       override def apply[F[_]](implicit C: Check[F]): F[Out[T]] = C.inSet[T](in, state)
     }
@@ -110,8 +110,10 @@ object InvariantsDsl {
   val expOr = uniqueProductName("a", Set("a", "b", "c")) or knownSpec(8l, Map(2l -> "a", 3l -> "b"))
   expOr(interp)
 
-  //ApplicativeError
+  //MonadError
   import cats.instances._
+  //import cats.implicits._
+  import cats.syntax.applicative
   //scala.util.Try, or maybe a scala.util.Either
   def find[F[_], T](es: List[T], e: T)(implicit E: cats.ApplicativeError[F, Throwable]): F[T] = {
     //Try
