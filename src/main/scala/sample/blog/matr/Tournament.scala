@@ -4,6 +4,8 @@ import matryoshka._
 import matryoshka.data.{Fix, Mu, Nu}
 import matryoshka.implicits._
 
+import scalaz.Foldable
+
 //import sample.blog.matr.Tournament
 object Tournament {
 
@@ -41,9 +43,8 @@ object Tournament {
   }
 
   type Depth = (Team, Int)
-
-
-  val evalWinner1: Algebra[Tournament.DrawF, cats.State] = ???
+  
+  //val evalWinner1: Algebra[Tournament.DrawF, cats.State] = ???
 
   val evalWinner: Algebra[Tournament.DrawF, Depth] = {
     case GameF(a, b) =>
@@ -75,18 +76,32 @@ object Tournament {
     r.c
   }
 
-  //ψ
+  //unfold -> anamorphism
   def ana[F[_]: scalaz.Functor, T](a: T)(f: T ⇒ F[T]): Fix[F] = {
     Fix(implicitly[scalaz.Functor[F]].map(f(a))(ana(_)(f)))
     //Fix(ψ(a).map(ana(_)(ψ)))
   }
 
-  def cata[F[_]: scalaz.Functor, T](t: Fix[F])(f: F[T] ⇒ T): T = {
-    f(implicitly[scalaz.Functor[F]].map(t.unFix)(cata(_)(f)))
-    //f(t.unFix.map(cata(_)(f)))
+  //fold to a single value -> catamorphism
+  def cata[F[_]: scalaz.Functor, T](fix: Fix[F])(f: F[T] ⇒ T): T = {
+    f(implicitly[scalaz.Functor[F]].map(fix.unFix)(cata(_)(f)))
+  }
+
+  def cata2[F[_], T](f: F[T] ⇒ T)(fix: Fix[F])(implicit F: scalaz.Functor[F]): T = {
+    f(F.map(fix.unFix)(cata(f)))
   }
 
   def anaM[M[_]: scalaz.Monad, F[_]: scalaz.Traverse, A](a: F[A])(f: A ⇒ M[F[A]]): M[Fix[F]] = {
+    /*
+    Functor[F].map(fa) { g =>
+      Foldable[G].foldLeft[A, L Either A](g, Left[L, A](ex)) { (_, b) => Right[L, A](b) }
+    }
+    */
+    
+    /*scalaz.Monad[M].map(f(a)) { g =>
+      scalaz.Foldable[F].traverse_(anaM(_)(f))
+    }*/
+
     //f(a).flatMap(_.traverse(anaM(_)(f))).map(Fix(_))
     ???
   }
@@ -115,4 +130,6 @@ object Tournament {
 
 
   //https://github.com/sellout/recursion-scheme-talk/blob/master/fix-ing-your-types.org
+  //https://japgolly.blogspot.de/2017/11/practical-awesome-recursion-ch-01.html
+  //http://kanaka.io/blog/2017/03/05/Nesting-in-the-nest-of-Nesting-Dolls-S01E01.html
 }

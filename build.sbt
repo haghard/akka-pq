@@ -1,7 +1,7 @@
 import com.typesafe.sbt.SbtMultiJvm
 import com.typesafe.sbt.SbtMultiJvm.MultiJvmKeys.MultiJvm
 
-val akkaVersion = "2.5.3"
+val akkaVersion = "2.5.7"
 val akkaHttpVersion = "10.0.9"
 
 val project = Project(
