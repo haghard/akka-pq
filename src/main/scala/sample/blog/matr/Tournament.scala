@@ -77,18 +77,20 @@ object Tournament {
   }
 
   //unfold -> anamorphism
+  //Unfold  ana	(a -> f a) -> a -> Fix f	Unfold
   def ana[F[_]: scalaz.Functor, T](a: T)(f: T ⇒ F[T]): Fix[F] = {
     Fix(implicitly[scalaz.Functor[F]].map(f(a))(ana(_)(f)))
     //Fix(ψ(a).map(ana(_)(ψ)))
   }
 
   //fold to a single value -> catamorphism
+  //Fold  cata	(f a -> a) -> Fix f -> a
   def cata[F[_]: scalaz.Functor, T](fix: Fix[F])(f: F[T] ⇒ T): T = {
     f(implicitly[scalaz.Functor[F]].map(fix.unFix)(cata(_)(f)))
   }
 
   def cata2[F[_], T](f: F[T] ⇒ T)(fix: Fix[F])(implicit F: scalaz.Functor[F]): T = {
-    f(F.map(fix.unFix)(cata(f)))
+    f(F.map(fix.unFix)(cata2(f)))
   }
 
   def anaM[M[_]: scalaz.Monad, F[_]: scalaz.Traverse, A](a: F[A])(f: A ⇒ M[F[A]]): M[Fix[F]] = {
