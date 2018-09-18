@@ -6,7 +6,6 @@ import cats.Id
 object InvariantsDsl {
 
   type Out[T] = Either[String, T]
-  //Finally Tagless
 
   trait CheckOps[F[_]] {
     def and[A, B](l: F[Out[A]], r: F[Out[B]]): F[Out[(A, B)]]
@@ -101,7 +100,7 @@ object InvariantsDsl {
   import Preconditions._
 
   val expAnd = ((uniqueProductName("a1", Set("a", "b", "c")) && uniqueSpec(2l, Set(2l, 3l, 4l, 5l, 6l, 7l)))
-                      or knownSpec(8l, Map(2l -> "a", 3l -> "b")))
+                 or knownSpec(8l, Map(2l -> "a", 3l -> "b")))
   expAnd(interp)
 
   knownSpecOpt(Some(8l), Map(2l -> "a", 18l -> "b"))(interp)
@@ -112,13 +111,42 @@ object InvariantsDsl {
 
   //MonadError
   import cats.instances._
+  import cats.implicits._
   //import cats.implicits._
   import cats.syntax.applicative
-  //scala.util.Try, or maybe a scala.util.Either
-  def find[F[_], T](es: List[T], e: T)(implicit E: cats.ApplicativeError[F, Throwable]): F[T] = {
-    //Try
-    es.find(_ == e)
+  //scala.util.Try or scala.util.Either
+
+  //def find2[F[_], T](es: List[T], e: T)(implicit E: cats.MonadError[F, Throwable]): F[T] = ???
+
+  //val x = implicitly[cats.ApplicativeError[Either[Throwable, ?], Throwable]]]
+  //val y = implicitly[cats.ApplicativeError[scala.util.Try, Throwable]]
+
+  //does'n work
+  //val z = implicitly[cats.ApplicativeError[cats.data.Validated[Throwable, ?], Throwable]]
+  //val z = implicitly[cats.ApplicativeError[scala.Option, Throwable]]
+
+  /*
+    For building computations from sequences of values that may fail and then halt the computation
+    or to catch those errors in order to resume the computation
+   */
+  def find[F[_], T](input: List[T], e: T)(implicit E: cats.ApplicativeError[F, Throwable]): F[T] = {
+    input.find(_ == e)
       .map(E.pure(_))
       .getOrElse(E.raiseError(new Exception(s"Could not find $e")))
   }
+
+  /*def findM[F[_], M[_]: cats.Monad, T](input: M[T], e: T)(implicit E: cats.MonadError[F, Throwable]): F[T] = {
+    input.find(_ == e)
+      .map(E.pure(_))
+      .getOrElse(E.raiseError(new Exception(s"Could not find $e")))
+  }*/
+
+
+  find[scala.util.Try, Int](List(1,2,3,4,5), 4)
+
+  type Or[T] = scala.util.Either[Throwable, T]
+  type Validated2[T] = cats.data.Validated[Throwable, T]
+
+  find[Or, Int](List(1,2,3,4,5), 4)
+  find[({ type λ[x] = scala.util.Either[Throwable, x] })#λ, Int](List(1,2,3,4,5), 4)
 }

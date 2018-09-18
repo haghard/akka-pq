@@ -2,16 +2,12 @@ package sample.blog
 
 import java.net.InetSocketAddress
 import java.util.UUID
-import java.util.concurrent.ThreadLocalRandom
-
-import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor.{Actor, ActorRef, ActorSystem, OneForOneStrategy, Props}
 import akka.persistence.cassandra.CassandraMetricsRegistry
 import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
 import akka.persistence.query.PersistenceQuery
 import akka.stream.scaladsl.{Keep, Sink}
 import akka.stream._
-import com.datastax.driver.core.exceptions.NoHostAvailableException
 import com.datastax.driver.core.{Cluster, SocketOptions}
 import com.typesafe.config.ConfigFactory
 import sample.blog.PsJournal.LastSeen
@@ -82,6 +78,7 @@ object BlogAppJournal {
   list(0)
   list(1)
   list(2)
+  //list(3)
 
   def main(args: Array[String]): Unit = {
     if (args.isEmpty) startup(Seq("2551", "2552", "0"))
@@ -126,7 +123,7 @@ object BlogAppJournal {
       implicit val system = ActorSystem("blog", config)
 
       val cassandraMetricsRegistry = CassandraMetricsRegistry.get(system)
-      cassandraMetricsRegistry.getRegistry.getHistograms
+      val histograms = cassandraMetricsRegistry.getRegistry.getHistograms
 
       implicit val m = akka.stream.ActorMaterializer(ActorMaterializerSettings(system)
         .withDispatcher("cassandra-dispatcher")
@@ -161,13 +158,14 @@ object BlogAppJournal {
   }
 
   def journalAkka(system: ActorSystem, pId: String, offset: Long) = {
-      import scala.concurrent.duration._
-      PersistenceQuery(system).readJournalFor[CassandraReadJournal](CassandraReadJournal.Identifier)
-        .currentEventsByPersistenceId(Roland, offset, Int.MaxValue).map(_.sequenceNr)
-        .viaMat(new LastSeen)(Keep.right)
-        .throttle(15, 1.second, 10, ThrottleMode.Shaping)
-        .toMat(Sink.foreach {  sequence_nr => println(sequence_nr) })(Keep.left)
-    }
+    import scala.concurrent.duration._
+    PersistenceQuery(system).readJournalFor[CassandraReadJournal](CassandraReadJournal.Identifier)
+      .currentEventsByPersistenceId(Roland, offset, Int.MaxValue)
+      .map(_.sequenceNr)
+      .viaMat(new LastSeen)(Keep.right)
+      .throttle(15, 1.second, 10, ThrottleMode.Shaping)
+      .toMat(Sink.foreach { sequence_nr => println(sequence_nr) })(Keep.left)
+  }
 
   def changes(client: Cluster, keySpace: String, table: String, pId: String, offset: Long, partitionSize: Long,
     pageSize: Int, interval: FiniteDuration)(implicit system: ActorSystem, M: ActorMaterializer): Unit = {
@@ -184,26 +182,27 @@ object BlogAppJournal {
             })(M.executionContext)
           case Failure(ex) =>
             println(s"Unexpected error:" + ex.getMessage)
+            client.close()
             System.exit(-1)
         }(M.executionContext)
     }
 
   def changes2(pId: String, offset: Long, interval: FiniteDuration)
     (implicit system: ActorSystem, M: ActorMaterializer): Unit = {
-        journalAkka(system, pId, offset)
-          .run()
-          .onComplete {
-            case Success(last) =>
-              val nextOffset = last.fold(offset)(_ + 1)
-              system.scheduler.scheduleOnce(interval, new Runnable {
-                override def run = {
-                  println(s"Trying to read starting from: $nextOffset")
-                  changes2(pId, nextOffset, interval)
-                }
-              })(M.executionContext)
-            case Failure(ex) =>
-              println(s"Unexpected error:" + ex.getMessage)
-              System.exit(-1)
-          }(M.executionContext)
-      }
+      journalAkka(system, pId, offset)
+        .run()
+        .onComplete {
+          case Success(last) =>
+            val nextOffset = last.fold(offset)(_ + 1)
+            system.scheduler.scheduleOnce(interval, new Runnable {
+              override def run = {
+                println(s"Trying to read starting from: $nextOffset")
+                changes2(pId, nextOffset, interval)
+              }
+            })(M.executionContext)
+          case Failure(ex) =>
+            println(s"Unexpected error:" + ex.getMessage)
+            System.exit(-1)
+        }(M.executionContext)
+    }
 }

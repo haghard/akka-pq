@@ -1,5 +1,6 @@
 package sample.blog
 
+
 import akka.cluster.Cluster
 import akka.remote.testconductor.RoleName
 import akka.remote.testkit.{MultiNodeConfig, MultiNodeSpec}
@@ -61,5 +62,4 @@ class RepSpec extends MultiNodeSpec(RepSpec) with STMultiNodeSpec with ImplicitS
     }
     enterBarrier(from.name + "-joined")
   }
-  
 }

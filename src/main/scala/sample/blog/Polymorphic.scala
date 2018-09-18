@@ -1,4 +1,4 @@
-package sample.blog
+package sample.blog;
 
 //http://degoes.net/articles/kill-data
 object Polymorphic {

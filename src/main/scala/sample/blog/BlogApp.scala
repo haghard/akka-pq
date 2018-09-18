@@ -25,6 +25,8 @@ import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
   ) WITH CLUSTERING ORDER BY (sequence_nr ASC, timestamp ASC, timebucket ASC)
 */
 
+
+//docker run -m 600M -it -p 7000:7000 -p 7001:7001 -p 9042:9042 -p 9160:9160 -p 7199:7199 -v /Volumes/dev/cassandra-db/blogs:/var/lib/cassandra -e JVM_OPTS="-Xms500M -Xmx500M" cassandra:3.11.2
 //runMain sample.blog.BlogApp 2551
 //runMain sample.blog.BlogApp 2552
 //runMain sample.blog.BlogApp 2553
@@ -35,9 +37,9 @@ object BlogApp {
   }
 
   def startup(ports: Seq[String]): Unit = {
-    ports foreach { port =>
+    ports.foreach { port =>
       val config = ConfigFactory.parseString("akka.remote.netty.tcp.port=" + port)
-        .withFallback(ConfigFactory.load)
+        .withFallback(ConfigFactory.load())
 
       // Create an Akka system
       implicit val system = ActorSystem("blog", config)

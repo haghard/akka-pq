@@ -7,7 +7,6 @@ import matryoshka.implicits._
 //import sample.blog.matr.Expressions
 object Expressions {
 
-
   sealed abstract class Expr[A]
   final case class Num[A](value: Long) extends Expr[A]
   final case class Add[A](a: A, b: A) extends Expr[A]

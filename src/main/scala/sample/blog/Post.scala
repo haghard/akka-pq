@@ -39,11 +39,11 @@ object Post {
 
   val numberOfShards = 100
   val shardResolver: ShardRegion.ExtractShardId = {
-    case cmd: Command => (math.abs(cmd.postId.hashCode) % numberOfShards).toString
+    case cmd: Command =>
+      (math.abs(cmd.postId.hashCode) % numberOfShards).toString
     case ShardRegion.StartEntity(id) ⇒
-      //???
       // StartEntity is used by remembering entities feature
-      (id.toLong % numberOfShards).toString
+      (math.abs(id.hashCode) % numberOfShards).toString
   }
 
   val shardName: String = "Post"
@@ -65,7 +65,7 @@ class Post(author: ActorRef) extends PersistentActor with ActorLogging {
   // self.path.name is the entry identifier (utf-8 URL-encoded)
   override def persistenceId: String = {
     val postId = self.path.parent.name + "-" + self.path.name
-    log.info("Post :" + postId)
+    //log.info("Post :" + postId)
     postId
   }
 

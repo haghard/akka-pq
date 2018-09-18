@@ -12,7 +12,8 @@ import akka.persistence.PersistentActor
 
 object AuthorListing {
 
-  def props(): Props = Props(new AuthorListing).withDispatcher("cassandra-dispatcher")
+  def props(): Props = Props(new AuthorListing)
+    .withDispatcher("cassandra-dispatcher")
 
   case class PostSummary(author: String, postId: String, title: String)
   case class GetPosts(author: String)
@@ -25,13 +26,14 @@ object AuthorListing {
 
   val numberOfShards = 100
   val shardResolver: ShardRegion.ExtractShardId = msg => msg match {
-    case s: PostSummary   =>
+    case s: PostSummary =>
       (math.abs(s.author.hashCode) % numberOfShards).toString
-    case GetPosts(author) => (math.abs(author.hashCode) % numberOfShards).toString
+    case GetPosts(author) =>
+      (math.abs(author.hashCode) % numberOfShards).toString
     case ShardRegion.StartEntity(id) ⇒
       //???
       // StartEntity is used by remembering entities feature
-      (id.toLong % numberOfShards).toString
+      (math.abs(id.hashCode) % numberOfShards).toString
   }
 
   val shardName: String = "AuthorListing"
@@ -66,5 +68,4 @@ class AuthorListing extends PersistentActor with ActorLogging {
     case evt: PostSummary => posts :+= evt
 
   }
-
 }

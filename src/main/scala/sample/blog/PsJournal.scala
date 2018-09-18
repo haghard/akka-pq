@@ -38,11 +38,12 @@ Thread safety of custom processing stages.
  * A Source that has one output and no inputs, it models a source of cassandra rows
  * associated with a persistenceId starting with offset.
  *
- * Taken from https://github.com/akka/alpakka/blob/master/cassandra/src/main/scala/akka/stream/alpakka/cassandra/CassandraSourceStage.scala
+ * The impl is based on this
+ * https://github.com/akka/alpakka/blob/master/cassandra/src/main/scala/akka/stream/alpakka/cassandra/CassandraSourceStage.scala
  * and adapted with respect to akka-cassandra-persistence schema
  */
-final class PsJournal(client: Cluster, keySpace: String, journal: String, persistenceId: String, offset: Long,
-  partitionSize: Long, pageSize: Int) extends GraphStage[SourceShape[Row]] {
+final class PsJournal(client: Cluster, keySpace: String, journal: String, persistenceId: String,
+  offset: Long, partitionSize: Long, pageSize: Int) extends GraphStage[SourceShape[Row]] {
   val out: Outlet[Row] = Outlet[Row](akka.event.Logging.simpleName(this) + ".out")
 
   private val retryTimeout = 10000
@@ -62,6 +63,7 @@ final class PsJournal(client: Cluster, keySpace: String, journal: String, persis
   */
   override protected def initialAttributes: Attributes =
     Attributes.name(persistenceId)
+
   //.and(ActorAttributes.dispatcher("cassandra-dispatcher"))
 
   private def navigatePartition(sequenceNr: Long, partitionSize: Long): Long = sequenceNr / partitionSize
@@ -99,44 +101,42 @@ final class PsJournal(client: Cluster, keySpace: String, journal: String, persis
 
       override def preStart(): Unit = {
         implicit val _ = materializer.executionContext
-        onMessageCallback = getAsyncCallback[Try[ResultSet]](onFinish)
+        onMessageCallback = getAsyncCallback[Try[ResultSet]](onFetchCompleted)
         val partition = navigatePartition(sequenceNr, partitionSize): JLong
         val stmt = statement(preparedStmt, persistenceId, partition, sequenceNr, pageSize)
         session.executeAsync(stmt).asScala.onComplete(onMessageCallback.invoke)
       }
 
-      setHandler(
-        out,
-        new OutHandler {
-          override def onPull(): Unit = {
-            implicit val _ = materializer.executionContext
-            partitionIter match {
-              case Some(iter) if iter.getAvailableWithoutFetching > 0 ⇒
-                sequenceNr += 1
-                push(out, iter.one)
-              case Some(iter) ⇒
-                if (iter.isExhausted) {
-                  //a current partition is exhausted, let's try to read from the next partition
-                  val nextPartition = navigatePartition(sequenceNr, partitionSize): JLong
-                  val stmt = statement(preparedStmt, persistenceId, nextPartition, sequenceNr, pageSize)
-                  session.executeAsync(stmt).asScala.onComplete(onMessageCallback.invoke)
-                } else {
-                  //Your page size less than akka-cassandra-persistence partition size(cassandra-journal.target-partition-size)
-                  //End of page but still have something to read in from the current partition,
-                  log.info("Still have something to read in current partition seqNum: {}", sequenceNr)
-                  iter.fetchMoreResults.asScala.onComplete(onMessageCallback.invoke)
-                }
-              case None ⇒
-                //log.info("A request from a downstream had arrived before we read the first row")
-                ()
-            }
+      setHandler(out, new OutHandler {
+        override def onPull(): Unit = {
+          implicit val _ = materializer.executionContext
+          partitionIter match {
+            case Some(iter) if iter.getAvailableWithoutFetching > 0 ⇒
+              sequenceNr += 1
+              push(out, iter.one)
+            case Some(iter) ⇒
+              if (iter.isExhausted) {
+                //a current partition is exhausted, let's try to read from the next partition
+                val nextPartition = navigatePartition(sequenceNr, partitionSize): JLong
+                val stmt = statement(preparedStmt, persistenceId, nextPartition, sequenceNr, pageSize)
+                session.executeAsync(stmt).asScala.onComplete(onMessageCallback.invoke)
+              } else {
+                //Your page size less than akka-cassandra-persistence partition size(cassandra-journal.target-partition-size)
+                //so you hit the end of page but still have something to read
+                log.info("Still have something to read in current partition seqNum: {}", sequenceNr)
+                iter.fetchMoreResults.asScala.onComplete(onMessageCallback.invoke)
+              }
+            case None ⇒
+              //log.info("A request from a downstream had arrived before we read the first row")
+              ()
           }
-        })
+        }
+      })
 
       /*
-       * End of a page or the end
+       * reached the end of page or the end of the journal
        */
-      private def onFinish(rsOrFailure: Try[ResultSet]): Unit = {
+      private def onFetchCompleted(rsOrFailure: Try[ResultSet]): Unit = {
         rsOrFailure match {
           case Success(iter) ⇒
             partitionIter = Some(iter)
@@ -163,7 +163,7 @@ final class PsJournal(client: Cluster, keySpace: String, journal: String, persis
 
 object PsJournal {
 
-  def apply[T: Reader : ClassTag](client: Cluster, keySpace: String, journal: String, persistenceId: String,
+  def apply[T: Codec : ClassTag](client: Cluster, keySpace: String, journal: String, persistenceId: String,
     offset: Long, partitionSize: Long, pageSize: Int = 32) = {
     Source.fromGraph(new PsJournal(client, keySpace, journal, persistenceId, offset, partitionSize, pageSize))
       .map(_.as[T])
@@ -176,6 +176,7 @@ object PsJournal {
     override def createLogicAndMaterializedValue(inheritedAttributes: Attributes): (GraphStageLogic, Future[Option[T]]) = {
       val matVal = Promise[Option[T]]
       val logic = new GraphStageLogic(shape) with StageLogging {
+
         import shape._
 
         private var current = Option.empty[T]
@@ -210,4 +211,5 @@ object PsJournal {
       (logic, matVal.future)
     }
   }
+
 }
