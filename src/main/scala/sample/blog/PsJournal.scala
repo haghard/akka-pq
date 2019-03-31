@@ -39,14 +39,14 @@ Thread safety of custom processing stages.
  * associated with a persistenceId starting with offset.
  *
  * The impl is based on this
- * https://github.com/akka/alpakka/blob/master/cassandra/src/main/scala/akka/stream/alpakka/cassandra/CassandraSourceStage.scala
+ * https://github.com/akka/alpakka/blob/master/cassandra/src/main/scala/akka/stream/alpakka/cassandra/impl/CassandraSourceStage.scala
  * and adapted with respect to akka-cassandra-persistence schema
  */
 final class PsJournal(client: Cluster, keySpace: String, journal: String, persistenceId: String,
   offset: Long, partitionSize: Long, pageSize: Int) extends GraphStage[SourceShape[Row]] {
   val out: Outlet[Row] = Outlet[Row](akka.event.Logging.simpleName(this) + ".out")
 
-  private val retryTimeout = 10000
+  private val retryTimeout = 3000
 
   override val shape: SourceShape[Row] = SourceShape(out)
 
@@ -72,15 +72,19 @@ final class PsJournal(client: Cluster, keySpace: String, journal: String, persis
     partition: JLong, sequenceNr: JLong, pageSize: Int) =
     new BoundStatement(preparedStmt).bind(persistenceId, partition, sequenceNr).setFetchSize(pageSize)
 
-  @tailrec private def tryToConnect[T](n: Int)(log: LoggingAdapter, f: => T): T =
+  @tailrec private def attempConnect[T](n: Int)(log: LoggingAdapter, f: => T): T = {
+    log.info("Getting cassandra connection")
     Try(f) match {
-      case Success(x) => x
-      case _ if n > 1 =>
+      case Success(x) =>
+        x
+      case Failure(e) if n > 1 =>
+        log.error(e.getMessage)
         Thread.sleep(retryTimeout)
-        log.info("Getting cassandra connection")
-        tryToConnect(n - 1)(log, f)
-      case Failure(e) => throw e
+        attempConnect(n - 1)(log, f)
+      case Failure(e) =>
+        throw e
     }
+  }
 
   override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
     new GraphStageLogic(shape) with StageLogging {
@@ -96,11 +100,14 @@ final class PsJournal(client: Cluster, keySpace: String, journal: String, persis
       var sequenceNr = offset
       var partitionIter = Option.empty[ResultSet]
       var onMessageCallback: AsyncCallback[Try[ResultSet]] = _
-      val session = tryToConnect(Int.MaxValue)(log, (client connect keySpace))
-      val preparedStmt = session.prepare(queryByPersistenceId)
+
+
+      //
+      lazy val session = attempConnect(Int.MaxValue)(log, client.connect(keySpace))
+      lazy val preparedStmt = session.prepare(queryByPersistenceId)
+      implicit lazy val ec = materializer.executionContext
 
       override def preStart(): Unit = {
-        implicit val _ = materializer.executionContext
         onMessageCallback = getAsyncCallback[Try[ResultSet]](onFetchCompleted)
         val partition = navigatePartition(sequenceNr, partitionSize): JLong
         val stmt = statement(preparedStmt, persistenceId, partition, sequenceNr, pageSize)
@@ -109,7 +116,6 @@ final class PsJournal(client: Cluster, keySpace: String, journal: String, persis
 
       setHandler(out, new OutHandler {
         override def onPull(): Unit = {
-          implicit val _ = materializer.executionContext
           partitionIter match {
             case Some(iter) if iter.getAvailableWithoutFetching > 0 ⇒
               sequenceNr += 1
@@ -169,6 +175,14 @@ object PsJournal {
       .map(_.as[T])
       .viaMat(new LastSeen)(Keep.right)
   }
+
+  def tupled(client: Cluster, keySpace: String, journal: String, persistenceId: String,
+    offset: Long, partitionSize: Long, pageSize: Int = 32) = {
+    Source.fromGraph(new PsJournal(client, keySpace, journal, persistenceId, offset, partitionSize, pageSize))
+      .map(_.asTuple)
+      .viaMat(new LastSeen)(Keep.right)
+  }
+
 
   final class LastSeen[T] extends GraphStageWithMaterializedValue[FlowShape[T, T], Future[Option[T]]] {
     override val shape = FlowShape(Inlet[T]("in"), Outlet[T]("out"))

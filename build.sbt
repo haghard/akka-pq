@@ -1,7 +1,7 @@
 import com.typesafe.sbt.SbtMultiJvm
 import com.typesafe.sbt.SbtMultiJvm.MultiJvmKeys.MultiJvm
 
-val akkaVersion = "2.5.14"
+val akkaVersion = "2.5.21"
 
 val project = Project(
   id = "akka-pq",
@@ -10,12 +10,12 @@ val project = Project(
     resolvers += Resolver.sonatypeRepo("snapshots"),
     name := """akka-pq""",
     version := "1.0",
-    scalaVersion := "2.12.4",
+    scalaVersion := "2.12.7",
     libraryDependencies ++= Seq(
       "com.typesafe.akka" %%  "akka-cluster" % akkaVersion,
       "com.typesafe.akka" %%  "akka-cluster-tools" % akkaVersion,
       "com.typesafe.akka" %%  "akka-cluster-sharding" % akkaVersion,
-      "com.typesafe.akka" %%  "akka-persistence-cassandra" % "0.59",
+      "com.typesafe.akka" %%  "akka-persistence-cassandra" % "0.90",
       "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
       "ch.qos.logback"    %  "logback-classic" % "1.2.3",
 
@@ -32,14 +32,13 @@ val project = Project(
       //"com.typesafe.akka" %%  "akka-http"      % akkaHttpVersion,
       //"org.hdrhistogram"  %   "HdrHistogram"      % "2.1.9",
       "com.chuusai"       %%  "shapeless"         %  "2.3.3",
-      "org.typelevel"     %%  "cats-core"         %   "1.0.0-MF",
+      "org.typelevel"     %%  "cats-core"         %   "1.4.0",
       "com.typesafe.akka" %%  "akka-multi-node-testkit" % akkaVersion,
       "net.cakesolutions" %%  "validated-config"  %  "1.1.2",
       //"com.typesafe.akka" %% "akka-distributed-data" % akkaVersion,
       "com.scalapenos"    %%  "stamina-json"      % "0.1.3",
       "com.slamdata"      %% "matryoshka-core" % "0.18.3",
 
-      "org.scalaz" %% "scalaz-zio" % "0.1-SNAPSHOT",
       "ch.qos.logback" % "logback-classic" % "1.2.3",
       "com.typesafe.scala-logging" %% "scala-logging" % "3.9.0",
 

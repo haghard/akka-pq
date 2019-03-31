@@ -113,17 +113,15 @@ object BlogAppJournal {
       val config = ConfigFactory.parseString("akka.remote.netty.tcp.port=" + port)
         .withFallback(ConfigFactory.load())
 
-      val partitionSize = config.getInt("cassandra-journal.target-partition-size")
-      val table = config.getString("cassandra-journal.table")
-      val ks = config.getString("cassandra-journal.keyspace")
-
-      val pageSize = partitionSize / 2
-
       // Create an Akka system
       implicit val system = ActorSystem("blog", config)
 
-      val cassandraMetricsRegistry = CassandraMetricsRegistry.get(system)
-      val histograms = cassandraMetricsRegistry.getRegistry.getHistograms
+      //val cassandraMetricsRegistry = CassandraMetricsRegistry.get(system)
+      //val histograms = cassandraMetricsRegistry.getRegistry.getHistograms
+
+      val partitionSize = config.getInt("cassandra-journal.target-partition-size")
+      val table = config.getString("cassandra-journal.table")
+      val pageSize = partitionSize / 2
 
       implicit val m = akka.stream.ActorMaterializer(ActorMaterializerSettings(system)
         .withDispatcher("cassandra-dispatcher")
@@ -139,8 +137,12 @@ object BlogAppJournal {
       val cp = buildContactPoints(contactPoints, port0)
       val keySpace = config.getString("cassandra-journal.keyspace")
 
+      val user = config.getString("cassandra-journal.authentication.username")
+      val pws = config.getString("cassandra-journal.authentication.password")
+
       val client = com.datastax.driver.core.Cluster.builder
         .addContactPointsWithPorts(cp.asJava)
+        .withCredentials(user, pws)
         //http://docs.datastax.com/en/developer/java-driver/3.2/manual/socket_options/
         .withSocketOptions(new SocketOptions().setConnectTimeoutMillis(5000))
         .build
@@ -152,9 +154,11 @@ object BlogAppJournal {
 
   def journal(client: Cluster, keySpace: String, table: String, pId: String, offset: Long, partitionSize: Long, pageSize: Int) = {
     import scala.concurrent.duration._
-    PsJournal[Record](client, keySpace, table, pId, offset, partitionSize, pageSize)
-      .throttle(15, 1.second, 15, ThrottleMode.Shaping)
-      .toMat(Sink.foreach { r => r.foreach { obj => println(obj.sequence_nr) } })(Keep.left)
+    //[Record]
+    PsJournal.tupled(client, keySpace, table, pId, offset, partitionSize, pageSize)
+      .throttle(pageSize, 1.second, 15, ThrottleMode.Shaping)
+      .toMat(Sink.foreach { r => println(r) })(Keep.left)
+      //.toMat(Sink.foreach { r => r.foreach { obj => println(obj) } })(Keep.left)
   }
 
   def journalAkka(system: ActorSystem, pId: String, offset: Long) = {
@@ -173,7 +177,8 @@ object BlogAppJournal {
         .run()
         .onComplete {
           case Success(last) =>
-            val nextOffset = last.fold(offset)(_.get.sequence_nr + 1)
+            //val nextOffset = last.fold(offset)(_.get.sequence_nr + 1)
+            val nextOffset = last.fold(offset)(_._3 + 1l)
             system.scheduler.scheduleOnce(interval, new Runnable {
               override def run = {
                 println(s"Trying to read starting from: $nextOffset")

@@ -33,7 +33,7 @@ object InvariantsDsl {
     }
   }
 
-  trait CheckSpecDsl {  self =>
+  trait CheckSpecDsl { self =>
     def uniqueSpec[T](in: T, state: Set[T]) = new DslElement[Out[T]] {
       override def apply[F[_]](implicit C: Check[F]): F[Out[T]] = C.inSet[T](in, state)
     }
@@ -59,7 +59,7 @@ object InvariantsDsl {
         C.or[A, B](l.apply[F], r.apply[F])
     }
 
-    implicit class PreconditionDslOpts[A, B](dslL: DslElement[Out[A]]) {
+    implicit class PreconditionDslOpts[A, B](dslL: DslElement[Out[A]])   {
       def &&(dslR: DslElement[Out[B]]): DslElement[Out[(A, B)]] = self.and(dslL, dslR)
       def or(dslR: DslElement[Out[B]]): DslElement[Out[A Either B]] = self.or(dslL, dslR)
     }

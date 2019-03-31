@@ -27,7 +27,7 @@ class Bot extends Actor with ActorLogging {
   }
 
   var n = 0
-  val authors = Map(0 -> "Patrik", 1 -> "Martin", 2 -> "Roland", 3 -> "Bjorn", 4 -> "Endre", 5 -> "Konrad")
+  val authors = Map(0 -> "Patrik", 1 -> "Martin", 2 -> "Roland"/*, 3 -> "Bjorn", 4 -> "Endre", 5 -> "Konrad"*/)
 
   def currentAuthor = authors(n % authors.size)
 

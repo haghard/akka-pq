@@ -6,11 +6,11 @@ import java.util.concurrent.{Executor, Executors, ThreadFactory, ThreadLocalRand
 
 import akka.cluster.sharding.ShardRegion
 import akka.actor.{ActorLogging, ActorRef, Kill, Props}
-import akka.persistence.{AtLeastOnceDelivery, PersistentActor}
+import akka.persistence.{AtLeastOnceDelivery, PersistentActor, RecoveryCompleted}
 import com.datastax.driver.core.utils.UUIDs
 import com.datastax.driver.core.{Cluster, ConsistencyLevel, QueryOptions}
 import com.google.common.util.concurrent.{FutureCallback, Futures, ListenableFuture}
-import sample.blog.identity.IdentityMatcher.{Confirm, IdentifyFaces, MLDaemons, WaterMark}
+import sample.blog.identity.IdentityMatcher._
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
 
@@ -20,7 +20,8 @@ object IdentityMatcher {
 
   case class Confirm(id: Long, afterFailure: Boolean = false)
 
-  case class WaterMark(deliveryId: Long, event: IdentifyFaces)
+  case class RecognizeFace(deliveryId: Long, event: IdentifyFaces, reDelivered: Boolean = false)
+  case class FacesRecognized(deliveryId: Long, faces: IdentifyFaces)
 
   val numberOfShards = 10
 
@@ -65,18 +66,17 @@ object IdentityMatcher {
     promise.future
   }
 
-
   def props = Props(new IdentityMatcher)
 }
 
 class IdentityMatcher extends PersistentActor with AtLeastOnceDelivery with ActorLogging {
-  val ex = Executors.newFixedThreadPool(2, MLDaemons("ml"))
+  val ex = Executors.newFixedThreadPool(1, MLDaemons("ml"))
   implicit val ml = ExecutionContext.fromExecutor(ex)
 
   override val persistenceId: String = "identity-matcher-actor"
 
   val cluster = new Cluster.Builder()
-    .addContactPoints(InetAddress.getByName("192.168.77.85"))
+    .addContactPoints(InetAddress.getByName("192.168.77.83"))
     .withQueryOptions(new QueryOptions().setConsistencyLevel(ConsistencyLevel.LOCAL_ONE))
     .withPort(9042)
     .build()
@@ -88,54 +88,58 @@ class IdentityMatcher extends PersistentActor with AtLeastOnceDelivery with Acto
 
   val ps = session.prepare("INSERT INTO blogs.ident_results(id, image_id, when) VALUES (?, ?, now())")
 
-  //UUIDs.timeBased()
 
-  val r = ThreadLocalRandom.current.nextInt(8, 12)
-
-  override def receiveRecover: Receive = handleIdentifyFace
-
-  def identifyAndProduce(id: Long): Future[Unit] = {
-    Future(ps.bind("faces", id: java.lang.Long))
-      .flatMap(bs => IdentityMatcher.asScalaFuture(session.executeAsync(bs), ex))
-      .map { rs =>
-        rs.one
-        log.info("!!!!!!!! Action: {} !!!!", id)
-      }(ml)
+  override def receiveRecover: Receive = {
+    case event: IdentifyFaces =>
+      //during recovery, only messages with an un-confirmed delivery will be resend
+      deliver(self.path)(deliveryId ⇒ RecognizeFace(deliveryId, event, recoveryRunning))
+    case FacesRecognized(deliveryId, _) =>
+      confirmDelivery(deliveryId)
   }
 
-  //during recovery, only messages with an un-confirmed delivery is will be resent
-  def handleIdentifyFace: Receive = {
-    case WaterMark(deliveryId: Long, identifyFaces: IdentifyFaces) ⇒
-      //log.info("recoveryRunning:{} deliveryId: {}", recoveryRunning, deliveryId)
-      identifyAndProduce(identifyFaces.id)
-        .onComplete {
-          case scala.util.Success(_) ⇒
-            log.info("confirmDelivery:{} deliveryId:{}", identifyFaces.id, deliveryId)
-            //we had to confirm it again(potentially twice) as
-            // we cant't distinguish if it's already been confirm or we recovered from a failure
-            identifyFaces.sender ! Confirm(identifyFaces.id, true)
-            confirmDelivery(deliveryId)
-          case scala.util.Failure(_) ⇒
-            self ! Kill
-        }(ml)
+  def identifyAndProduce(deliveryId: Long, faces: IdentifyFaces): Future[FacesRecognized] = {
+    //Long running task
+    //Future(Thread.sleep(420)).flatMap { _ =>
+      Future(ps.bind("faces", faces.id: java.lang.Long))
+        .flatMap(bs => IdentityMatcher.asScalaFuture(session.executeAsync(bs), ex))
+        .map { rs =>
+          rs.one
+          FacesRecognized(deliveryId, faces)
+        }
+    //}
   }
 
-  override def receiveCommand: Receive = handleIdentifyFace orElse {
+  override def receiveCommand: Receive = {
     case id: Long =>
       val replyTo = sender()
       persist(IdentifyFaces(id, replyTo)) { event =>
-        log.info("persisted {}", event.id)
+        deliver(self.path)(deliveryId ⇒ RecognizeFace(deliveryId, event))
+        log.info("Event from kafka: {}", event.id)
 
-        //if we fail here we will get redelivery from the Bot
-        //if (id % 2 == 0 && id > 5) throw new Exception("Boooom !!!")
+        if (ThreadLocalRandom.current.nextDouble > 0.98) {
+          log.error("Error while processing: {}", event.id)
+          throw new Exception("Crash !!!")
+        }
 
-        deliver(self.path)(deliveryId ⇒ WaterMark(deliveryId, event))
-
-        //it we fail here, during recovery we will get a message with the deliveryId
-        if (id % r == 0) throw new Exception("Crash !!!")
-
-        //At this point it is safe to confirm
-        sender() ! Confirm(id)
+        //reply to kafka
+        event.sender ! Confirm(id)
       }
+
+    case RecognizeFace(deliveryId: Long, faces: IdentifyFaces, rec) ⇒
+      log.info("FacesRecognition job: [id:{}-deliveryId:{}] Redelivered:{}", faces.id, deliveryId, rec)
+      import akka.pattern.pipe
+      identifyAndProduce(deliveryId, faces).pipeTo(self)
+
+    case e: FacesRecognized =>
+      persist(e) { ev =>
+        log.info("******************************** Recognized:{}", e.faces.id)
+        //double confirmation
+        ev.faces.sender ! Confirm(ev.faces.id, true)
+        confirmDelivery(ev.deliveryId)
+      }
+
+    case akka.actor.Status.Failure(ex) =>
+      log.error(ex, "Kiiiilllllllll !!!!")
+      self ! Kill
   }
 }

@@ -32,10 +32,10 @@ object Lang {
     }
   }
 
-  sealed trait NumberIsh[A]
-  object NumberIsh {
-    implicit val IntNumberLike = new NumberIsh[Type.Int] { }
-    implicit val DecNumberLike = new NumberIsh[Type.Dec] { }
+  sealed trait NumberT[A]
+  object NumberT {
+    implicit val IntNumberLike = new NumberT[Type.Int] { }
+    implicit val DecNumberLike = new NumberT[Type.Dec] { }
   }
 
   import Type._
@@ -79,11 +79,11 @@ object Lang {
   trait Mapping[A <: Type, B <: Type] extends Dynamic { self =>
     def apply[F[_]: MappingOps](v: F[A]): F[B]
 
-    def + (that: Mapping[A, B])(implicit N: NumberIsh[B]): Mapping[A, B] = new Mapping[A, B] {
+    def + (that: Mapping[A, B])(implicit N: NumberT[B]): Mapping[A, B] = new Mapping[A, B] {
       def apply[F[_]: MappingOps](v: F[A]): F[B] = MappingOps[F].add(self(v), that(v))
     }
 
-    def - (that: Mapping[A, B])(implicit N: NumberIsh[B]): Mapping[A, B] = new Mapping[A, B] {
+    def - (that: Mapping[A, B])(implicit N: NumberT[B]): Mapping[A, B] = new Mapping[A, B] {
       def apply[F[_]: MappingOps](v: F[A]): F[B] = MappingOps[F].subtract(self(v), that(v))
     }
 
@@ -99,8 +99,8 @@ object Lang {
   }
 
   trait MappingOps[F[_]] {
-    def add[A <: Type: NumberIsh](l: F[A], r: F[A]): F[A]
-    def subtract[A <: Type: NumberIsh](l: F[A], r: F[A]): F[A]
+    def add[A <: Type: NumberT](l: F[A], r: F[A]): F[A]
+    def subtract[A <: Type: NumberT](l: F[A], r: F[A]): F[A]
     def typed[A <: Type, B <: Type: LangType](v: F[A], t: B): F[B]
   }
 

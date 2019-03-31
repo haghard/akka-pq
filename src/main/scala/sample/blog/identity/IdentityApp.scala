@@ -32,8 +32,8 @@ object IdentityApp {
       */
 
       if (port != "2551" && port != "2552") {
-        val region = system.actorOf(IdentityMatcher.props)
-        system.actorOf(IdentityBot.props(region), "identity-bot")
+        val region = system.actorOf(IdentityMatcher.props, "matcher")
+        system.actorOf(KafkaConsumerBot.props(region), "identity-bot")
       }
     }
   }
