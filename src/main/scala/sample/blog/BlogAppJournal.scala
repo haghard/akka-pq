@@ -154,8 +154,8 @@ object BlogAppJournal {
 
   def journal(client: Cluster, keySpace: String, table: String, pId: String, offset: Long, partitionSize: Long, pageSize: Int) = {
     import scala.concurrent.duration._
-    //[Record]
-    PsJournal.tupled(client, keySpace, table, pId, offset, partitionSize, pageSize)
+    PsJournal[Record](client, keySpace, table, pId, offset, partitionSize, pageSize)
+    //PsJournal.tupled(client, keySpace, table, pId, offset, partitionSize, pageSize)
       .throttle(pageSize, 1.second, 15, ThrottleMode.Shaping)
       .toMat(Sink.foreach { r => println(r) })(Keep.left)
       //.toMat(Sink.foreach { r => r.foreach { obj => println(obj) } })(Keep.left)

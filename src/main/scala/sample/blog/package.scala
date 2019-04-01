@@ -8,67 +8,73 @@ import shapeless._
 
 import scala.reflect.ClassTag
 import scala.util.Try
-
-import cats.data.{NonEmptyList, Validated}
+import cats.data.{NonEmptyList, Validated, ValidatedNel}
 import cats.implicits._
 import cats.data.Validated._
 
 package object blog {
+
+  type ErrorsOr[T] = ValidatedNel[String, T]
 
   //persistence_id, partition_nr, sequence_nr, timestamp, timebucket, event
   //Schema
   val PersistenceId = Witness("persistence_id")
   val PartitionNr = Witness("partition_nr")
   val SequenceNr = Witness("sequence_nr")
-  val timestamp = Witness("timestamp")
-  val timebucket = Witness("timebucket")
+  val Timestamp = Witness("timestamp")
+  val Timebucket = Witness("timebucket")
   val Event = Witness("event")
 
-  trait CCodec[DbType, JvmType] extends (Row => Validated[NonEmptyList[String], JvmType])
+  val schema = Seq(PersistenceId, PartitionNr, SequenceNr, Timestamp, Timebucket, Event)
+
+  trait CasCodec[DbType, JvmType] extends (Row => ErrorsOr[JvmType])
 
   trait ColumnCodec[ColumnName] {
     type DbType
     type JvmType
 
-    def codec: CCodec[DbType, JvmType]
+    def codec: CasCodec[DbType, JvmType]
   }
 
   implicit val persistenceIdCodec = new ColumnCodec[PersistenceId.T] {
     override type DbType = String
     override type JvmType = String
 
-    override def codec: CCodec[DbType, JvmType] =
+    override def codec: CasCodec[DbType, JvmType] =
       (r: Row) =>
         Try(r.getString(PersistenceId.value))
-          .fold({ ex => Invalid(NonEmptyList.of(PersistenceId.value + ":" + ex.getMessage)) }, Valid(_))
+          .fold({ ex => invalidNel(PersistenceId.value + ":" + ex.getMessage) }, validNel(_))
   }
 
   implicit val partitionNrCodec = new ColumnCodec[PartitionNr.T] {
     override type DbType = Long
     override type JvmType = Long
 
-    override def codec: CCodec[DbType, JvmType] = (r: Row) =>
+    override def codec: CasCodec[DbType, JvmType] = (r: Row) =>
       Try(r.getLong(PartitionNr.value))
-        .fold({ ex => Invalid(NonEmptyList.of(PartitionNr.value + ":" + ex.getMessage)) }, Valid(_))
+        .fold({ ex => invalidNel(PartitionNr.value + ":" + ex.getMessage) }, validNel(_))
+
   }
 
   implicit val sequenceNrCodec = new ColumnCodec[SequenceNr.T] {
     override type DbType = Long
     override type JvmType = Long
 
-    override def codec: CCodec[DbType, JvmType] = (r: Row) =>
+    override def codec: CasCodec[DbType, JvmType] = (r: Row) =>
       Try(r.getLong(SequenceNr.value))
-        .fold({ ex => Invalid(NonEmptyList.of(SequenceNr.value + ":" + ex.getMessage)) }, Valid(_))
+        .fold({ ex => invalidNel(SequenceNr.value + ":" + ex.getMessage) }, validNel(_))
   }
 
   implicit val eventCodec = new ColumnCodec[Event.T] {
     override type DbType = ByteBuffer
     override type JvmType = Array[Byte]
 
-    override def codec: CCodec[DbType, JvmType] = (r: Row) =>
+    override def codec: CasCodec[DbType, JvmType] = (r: Row) =>
       Try(r.getBytes(Event.value).array)
-        .fold({ ex => Invalid(NonEmptyList.of(Event.value + ":" + ex.getMessage)) }, Valid(_))
+        .fold({ ex => invalidNel(Event.value + ":" + ex.getMessage) }, validNel(_))
   }
+
+
 
 
   trait Codec[A] {
@@ -156,9 +162,15 @@ package object blog {
 
     def asTuple: (String, Long, Long, Array[Byte]) = {
       //Using NonEmptyList to accumulate failures
+
       val validatedRow: Validated[NonEmptyList[String], (String, Long, Long, Array[Byte])] =
-        (read[PersistenceId.T](row), read[PartitionNr.T](row),
-          read[SequenceNr.T](row), read[Event.T](row)).mapN((_, _, _, _))
+        cats.Apply[ErrorsOr].map4(
+          read[PersistenceId.T](row), read[PartitionNr.T](row), read[SequenceNr.T](row),
+          read[Event.T](row))((_,_,_,_))
+
+      //with tuples
+      /*((read[PersistenceId.T](row), read[PartitionNr.T](row),
+        read[SequenceNr.T](row), read[Event.T](row))).mapN((_, _, _, _))*/
 
       validatedRow match {
         case Invalid(ers) =>
@@ -174,7 +186,6 @@ package object blog {
       val fields = tag.runtimeClass.getDeclaredFields.map(_.getName).toVector
       c(row, fields, 0)
     }
-
 
     //import scala.annotation.tailrec
     /*
