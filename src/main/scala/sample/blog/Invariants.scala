@@ -10,14 +10,13 @@ object Invariants {
   implicit val setApplicative: Applicative[Set] = new Applicative[Set] {
     override def pure[A](x: A): Set[A] = Set(x)
 
-    override def ap[A, B](ff: Set[(A) => B])(fa: Set[A]): Set[B] =
-      for {a <- fa; f <- ff} yield f(a)
+    override def ap[A, B](ff: Set[A ⇒ B])(fa: Set[A]): Set[B] =
+      for { a ← fa; f ← ff } yield f(a)
   }
 
-  trait Check[Input, State] {
+  trait Check[T, State] extends ((T, State) ⇒ Boolean) {
     def name: String
-    def apply(in: Input, on: State): Boolean
-    def errorMessage(in: Input, state: State): String
+    def errorMessage(in: T, state: State): String
     def emptyInputMessage = s"Empty input while checking binary logic thing $name"
   }
 
@@ -34,52 +33,57 @@ object Invariants {
 
   class NameIsUnique extends Check[String, Set[String]] {
     override val name = "Precondition: UniqueName"
-    override def apply(in: String, state: Set[String]): Boolean = !state.contains(name)
-    override def errorMessage(name: String, state: Set[String]) = s"$name is not unique"
+    override def apply(in: String, state: Set[String]): Boolean =
+      !state.contains(name)
+    override def errorMessage(name: String, state: Set[String]) =
+      s"$name is not unique"
   }
 
   class ContainsKey extends Check[Long, Map[Long, String]] {
     override val name = "Precondition: ContainsKey"
-    override def apply(in: Long, state: Map[Long, String]): Boolean = state.get(in).isDefined
-    override def errorMessage(in: Long, state: Map[Long, String]) = s"key $in is known"
+    override def apply(in: Long, state: Map[Long, String]): Boolean =
+      state.get(in).isDefined
+    override def errorMessage(in: Long, state: Map[Long, String]) =
+      s"key $in is known"
   }
 
   class HasRoles extends Check[Set[Int], Set[Int]] {
     override val name = "Precondition: HasRoles"
-    override def apply(ids: Set[Int], state: Set[Int]) = ids.filter(id => !state.contains(id)).isEmpty
-    override def errorMessage(ids: Set[Int], state: Set[Int]) = s"User with roles [${ids.mkString(",")}] is not allowed to do this operation"
+    override def apply(ids: Set[Int], state: Set[Int]): Boolean =
+      ids.filter(id ⇒ !state.contains(id)).isEmpty
+    override def errorMessage(ids: Set[Int], state: Set[Int]) =
+      s"User with roles [${ids.mkString(",")}] is not allowed to do this operation"
   }
 
   trait Catamorphism[F[_]] {
-    def cata[A](opt: F[A])(ifNull: ⇒ Either[String, F[A]], ifNotNull: A ⇒ Either[String, F[A]]): Either[String, F[A]]
+    def cata[A](in: F[A])(ifNull: ⇒ Either[String, F[A]], ifNotNull: A ⇒ Either[String, F[A]]): Either[String, F[A]]
   }
 
   implicit object OptionalCatamorphism extends Catamorphism[Option] {
-    override def cata[A](opt: Option[A])(
+    override def cata[A](in: Option[A])(
       ifNull: ⇒ Either[String, Option[A]],
-      ifNotNull: (A) ⇒ Either[String, Option[A]]
-    ): Either[String, Option[A]] = opt.fold(ifNull)(ifNotNull(_))
+      ifNotNull: A ⇒ Either[String, Option[A]]
+    ): Either[String, Option[A]] = in.fold(ifNull)(ifNotNull(_))
   }
 
   implicit object IdCatamorphism extends Catamorphism[cats.Id] {
-    override def cata[A](opt: cats.Id[A])(
+    override def cata[A](in: cats.Id[A])(
       ifNull: ⇒ Either[String, cats.Id[A]],
-      ifNotNull: (A) ⇒ Either[String, cats.Id[A]]
-    ): Either[String, cats.Id[A]] = if (opt == null) ifNull else ifNotNull(opt)
+      ifNotNull: A ⇒ Either[String, cats.Id[A]]
+    ): Either[String, cats.Id[A]] = if (in == null) ifNull else ifNotNull(in)
   }
 
   //: cats.Applicative
   object Precondition {
-    private def create[T <: Check[_, _] : ClassTag, F[_]](ignore: Boolean) = {
+    private def create[T <: Check[_, _]: ClassTag, F[_]](ignore: Boolean): Precondition[F] = {
       new Precondition[F] {
         override val ignoreIfEmpty = ignore
-        override def input[T, State](in: F[T], state: State)
-          (implicit B: Check[T, State], C: Catamorphism[F]): Either[String, F[T]] = {
-          val success: Either[String, F[T]] = Right(in) //we want to return in here !!!
+        override def input[T, State](in: F[T], state: State)(implicit B: Check[T, State], C: Catamorphism[F]): Either[String, F[T]] = {
+          val success: Either[String, F[T]] = Right(in)
           if (ignoreIfEmpty) {
-            C.cata(in)(success, { input => if (B(input, state)) success else Left(B.errorMessage(input, state)) })
+            C.cata(in)(success, { input ⇒ if (B(input, state)) success else Left(B.errorMessage(input, state)) })
           } else {
-            C.cata(in)(Left(B.emptyInputMessage), { input =>
+            C.cata(in)(Left(B.emptyInputMessage), { input ⇒
               println(s"${B.name}[input: $input  ->  $state]")
               if (B(input, state)) success else Left(B.errorMessage(input, state))
             })
@@ -88,13 +92,12 @@ object Invariants {
       }
     }
 
-    def ignorable[T <: Check[_, _] : ClassTag, F[_]]: Precondition[F] =
+    def ignorable[T <: Check[_, _]: ClassTag, F[_]]: Precondition[F] =
       create(true)
 
-    def apply[T <: Check[_, _] : ClassTag, F[_]]: Precondition[F] =
+    def apply[T <: Check[_, _]: ClassTag, F[_]]: Precondition[F] =
       create(false)
   }
-
 
   import shapeless._
   import ops.function._
@@ -118,18 +121,18 @@ object Invariants {
    *
    * Abstracting over arity
    */
-  def product[P <: Product, F, L <: HList, R](p: P)(f: F)
-    (implicit generic: Generic.Aux[P, L], fp: FnToProduct.Aux[F, L => R]): R = {
-    val hlist = generic to p
+  def product[P <: Product, F, L <: HList, R](product: P)(f: F)(implicit G: Generic.Aux[P, L], fp: FnToProduct.Aux[F, L ⇒ R]): R = {
+    val hlist = G to product
     f.toProduct(hlist)
   }
 
+  implicit val aa = new ExistedId
+  implicit val ab = new NameIsUnique
+  implicit val ac = new HasRoles
+  implicit val af = new ContainsKey
+
   //http://typelevel.org/cats/typeclasses/applicative.html
   def main(args: Array[String]): Unit = {
-    implicit val aa = new ExistedId
-    implicit val ab = new NameIsUnique
-    implicit val ac = new HasRoles
-    implicit val af = new ContainsKey
     val success = Right(1)
 
     /*def eitherMonad[T]: cats.Monad[({type λ[α] = Either[T, α]})#λ] =
@@ -142,30 +145,45 @@ object Invariants {
       }
       */
 
-     /*Precondition[ExistedId, Option].input(Some(1037l), Set(103l, 4l, 78l, 32l, 8l, 1l)).flatMap { a =>
-      Precondition[HasRoles, cats.Id].input(Set(1, 7), Set(1, 3, 4, 5, 6, 7, 8)).map { b =>
-        (a,b)
-      }
-    }*/
+    import cats.implicits._
+    import cats.data.Validated._
+
+    val a = Precondition.ignorable[ExistedId, Option].input(Some(8L), Set(103L, 4L, 78L, 32L, 8L, 1L)).toValidatedNel
+    val b = Precondition.ignorable[HasRoles, cats.Id].input(Set(1, 9), Set(1, 3, 4, 5, 6, 7, 8)).toValidatedNel
+    val c = Precondition.ignorable[NameIsUnique, cats.Id].input("bkl", Set("b", "c", "d", "e")).toValidatedNel
+    val d = Precondition.ignorable[ContainsKey, cats.Id].input(4L, Map(5L -> "b", 6L -> "d", 7L -> "e")).toValidatedNel
+    val out0 = cats.Traverse[List].sequence(List(a, b, c, d))
+
+    out0.fold({ errors ⇒
+      println("errors: " + errors.size + " : " + errors)
+    }, { results ⇒
+      println("results: " + results.size + " : " + results)
+    })
+
+    println("**************")
 
     //The whole pipeline stops
     val out =
       for {
-        a <- Precondition[ExistedId, Option].input(Some(103l), Set(103l, 4l, 78l, 32l, 8l, 1l))
-          .fold(Left(_), { _ => success })
+        a ← Precondition[ExistedId, Option]
+          .input(Some(103L), Set(103L, 4L, 78L, 32L, 8L, 1L))
+          .fold(Left(_), { _ ⇒ success })
 
-        b <- Precondition[HasRoles, cats.Id].input(Set(1, 7), Set(1, 3, 4, 5, 6, 7, 8))
-          .fold(Left(_), { _ => success })
+        b ← Precondition[HasRoles, cats.Id]
+          .input(Set(1, 9), Set(1, 3, 4, 5, 6, 7, 8))
+          .fold(Left(_), { _ ⇒ success })
 
-        c <- Precondition[NameIsUnique, cats.Id].input("bkl", Set("b", "c", "d", "e"))
-          .fold(Left(_), { _ => success })
+        c ← Precondition[NameIsUnique, cats.Id]
+          .input("bkl", Set("b", "c", "d", "e"))
+          .fold(Left(_), { _ ⇒ success })
 
-        d <- Precondition[ContainsKey, cats.Id].input(5l, Map(5l -> "b", 6l -> "d", 7l -> "e"))
-          .fold(Left(_), { _ => success })
+        d ← Precondition[ContainsKey, cats.Id]
+          .input(5L, Map(5L -> "b", 6L -> "d", 7L -> "e"))
+          .fold(Left(_), { _ ⇒ success })
 
-        e <- Right(78)
+        e ← Right(78)
 
-        result <- product(a, b, c, d, e) { (a: Int, b: Int, c: Int, d: Int, e: Int) =>
+        result ← product(a, b, c, d, e) { (a: Int, b: Int, c: Int, d: Int, e: Int) ⇒
           Right(a + b + c + d + e)
         }
       } yield result

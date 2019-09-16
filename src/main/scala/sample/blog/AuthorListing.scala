@@ -20,15 +20,15 @@ object AuthorListing {
   case class Posts(list: immutable.IndexedSeq[PostSummary])
 
   val idExtractor: ShardRegion.ExtractEntityId = {
-    case s: PostSummary => (s.author, s)
-    case m: GetPosts    => (m.author, m)
+    case s: PostSummary ⇒ (s.author, s)
+    case m: GetPosts    ⇒ (m.author, m)
   }
 
   val numberOfShards = 100
-  val shardResolver: ShardRegion.ExtractShardId = msg => msg match {
-    case s: PostSummary =>
+  val shardResolver: ShardRegion.ExtractShardId = msg ⇒ msg match {
+    case s: PostSummary ⇒
       (math.abs(s.author.hashCode) % numberOfShards).toString
-    case GetPosts(author) =>
+    case GetPosts(author) ⇒
       (math.abs(author.hashCode) % numberOfShards).toString
     case ShardRegion.StartEntity(id) ⇒
       //???
@@ -54,18 +54,18 @@ class AuthorListing extends PersistentActor with ActorLogging {
   var posts = Vector.empty[PostSummary]
 
   def receiveCommand = {
-    case s: PostSummary =>
-      persist(s) { evt =>
+    case s: PostSummary ⇒
+      persist(s) { evt ⇒
         posts :+= evt
         log.info("Post added to {}'s list: {}", s.author, s.title)
       }
-    case GetPosts(_) =>
+    case GetPosts(_) ⇒
       sender() ! Posts(posts)
-    case ReceiveTimeout => context.parent ! Passivate(stopMessage = PoisonPill)
+    case ReceiveTimeout ⇒ context.parent ! Passivate(stopMessage = PoisonPill)
   }
 
   override def receiveRecover: Receive = {
-    case evt: PostSummary => posts :+= evt
+    case evt: PostSummary ⇒ posts :+= evt
 
   }
 }

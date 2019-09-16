@@ -1,7 +1,7 @@
 package sample.blog.matr
 
 import matryoshka._
-import matryoshka.data.{Fix, Mu, Nu}
+import matryoshka.data.{ Fix, Mu, Nu }
 import matryoshka.implicits._
 
 import scalaz.Foldable
@@ -19,21 +19,21 @@ object Tournament {
   case class GameF[A](a: Team, b: Team) extends DrawF[A]
 
   implicit val tournamentFunctor = new scalaz.Functor[DrawF] {
-    override def map[A, B](fa: DrawF[A])(f: (A) => B) = fa match {
-      case NextGameF(a, b) => NextGameF(f(a), f(b))
-      case GameF(a, b)     => GameF(a, b)
+    override def map[A, B](fa: DrawF[A])(f: (A) ⇒ B) = fa match {
+      case NextGameF(a, b) ⇒ NextGameF(f(a), f(b))
+      case GameF(a, b)     ⇒ GameF(a, b)
     }
   }
 
   def printMatch(): Algebra[Tournament.DrawF, Unit] = {
-    case GameF(a, b) =>
+    case GameF(a, b) ⇒
       println(s"$a vs $b")
-    case NextGameF(_,_) =>
+    case NextGameF(_, _) ⇒
       println("-- node --")
   }
 
   def offset(level: Int) =
-    (0 until level).foldLeft("")((acc, _) => acc + "--")
+    (0 until level).foldLeft("")((acc, _) ⇒ acc + "--")
 
   def printW(pref: String, level: Int, a: Team, b: Team, w: Team) = {
     println("***********************")
@@ -43,11 +43,11 @@ object Tournament {
   }
 
   type Depth = (Team, Int)
-  
+
   //val evalWinner1: Algebra[Tournament.DrawF, cats.State] = ???
 
   val evalWinner: Algebra[Tournament.DrawF, Depth] = {
-    case GameF(a, b) =>
+    case GameF(a, b) ⇒
       val level = 1
       val pref = offset(level)
       if (a.c > b.c) {
@@ -57,7 +57,7 @@ object Tournament {
         printW(pref, level, a, b, b)
         (b, level)
       }
-    case NextGameF((a, ad), (b, bd)) =>
+    case NextGameF((a, ad), (b, bd)) ⇒
       val level = ad + 1
       val pref = offset(level)
       if (a.c > b.c) {
@@ -68,7 +68,6 @@ object Tournament {
         (b, level)
       }
   }
-
 
   def probabilityOfWin[T](a: Team, b: Team): Float = {
     val r = if (a.c > b.c) a else b
@@ -100,7 +99,7 @@ object Tournament {
       Foldable[G].foldLeft[A, L Either A](g, Left[L, A](ex)) { (_, b) => Right[L, A](b) }
     }
     */
-    
+
     /*scalaz.Monad[M].map(f(a)) { g =>
       scalaz.Foldable[F].traverse_(anaM(_)(f))
     }*/
@@ -114,7 +113,7 @@ object Tournament {
 
     scalaz.Monad[F].point(P.empty[A])
     */
-    
+
     //M.bind(a) { a0 => M.map(b) { P.plus(a0, _) } }
 
     //f(a).flatMap(_.traverse(anaM(_)(f))).map(Fix(_))
@@ -124,9 +123,9 @@ object Tournament {
   //unfold
   def anaTournament[T](participants: List[Team])(implicit T: Corecursive.Aux[T, DrawF]): T = {
     participants match {
-      case a :: b :: Nil =>
+      case a :: b :: Nil ⇒
         GameF[T](a, b).embed
-      case xs =>
+      case xs ⇒
         assert(xs.size % 2 == 0)
         val (l, r) = xs.splitAt(xs.size / 2)
         NextGameF[T](anaTournament(l), anaTournament(r)).embed
@@ -134,7 +133,7 @@ object Tournament {
   }
 
   val input = List(Team("okc", 0.62f), Team("hou", 0.65f), Team("csw", 0.89f), Team("mem", 0.74f),
-    Team("tor", 0.48f), Team("was", 0.73f), Team("bos", 0.148f), Team("cav", 0.88f))
+                   Team("tor", 0.48f), Team("was", 0.73f), Team("bos", 0.148f), Team("cav", 0.88f))
 
   anaTournament[Fix[DrawF]](input).cata(evalWinner)
 
@@ -144,7 +143,6 @@ object Tournament {
   //coinductive (potentially infinite) recursive structures
   anaTournament[Nu[DrawF]](input).cata(evalWinner)
 
-
   sealed trait Tree[+T] {
     def value: T
     def children: List[Tree[T]]
@@ -152,11 +150,9 @@ object Tournament {
 
   final case class Node[T](value: T, children: List[Tree[T]] = Nil) extends Tree[T]
 
-
   sealed trait TreeF[+T]
   final case class NodeF[T](next: T) extends TreeF[T]
   final case class L(id: Long, starts: String, ends: String) extends TreeF[Nothing]
-
 
   sealed trait Tree2[+A, +F]
   final case class Node2[+A, +F](value: A, ch: List[F]) extends Tree2[A, F]
@@ -170,41 +166,40 @@ object Tournament {
       List(
         Node(
           L(1, "21/02/2016", "26/02/2016"),
-            List(Node(L(12, "21/02/2016", "26/02/2016")), Node(L(13, "21/02/2016", "26/02/2016")))
+          List(Node(L(12, "21/02/2016", "26/02/2016")), Node(L(13, "21/02/2016", "26/02/2016")))
         ),
         Node(
           L(2, "26/02/2016", "28/02/2016"),
-            List(Node(L(21, "21/02/2016", "26/02/2016")), Node(L(22, "21/02/2016", "26/02/2016")))
+          List(Node(L(21, "21/02/2016", "26/02/2016")), Node(L(22, "21/02/2016", "26/02/2016")))
         )
       )
     )
 
   implicit val f = new scalaz.Functor[Tree] {
-    override def map[A, B](fa: Tree[A])(f: A => B): Tree[B] = {
+    override def map[A, B](fa: Tree[A])(f: A ⇒ B): Tree[B] = {
       Node(f(fa.value), fa.children.map(map(_)(f)))
     }
   }
 
   def evalSum[N](implicit N: Numeric[N]): Algebra[Tree2[N, ?], N] = {
-    case Node2(v, ch) => N.plus(v, ch.sum[N])
-    case Leaf => N.zero
+    case Node2(v, ch) ⇒ N.plus(v, ch.sum[N])
+    case Leaf         ⇒ N.zero
   }
 
   def evalNodeCount[T]: Algebra[Tree2[T, ?], Int] = {
-    case Node2(_, ch) => 1 + ch.size
-    case Leaf         => 0
+    case Node2(_, ch) ⇒ 1 + ch.size
+    case Leaf         ⇒ 0
   }
-
 
   sealed trait TreeF2[+A]
   final case class LeafF2[A](v: L) extends TreeF2[A]
   final case class BranchF2[A](a: A, b: A) extends TreeF2[A]
 
   implicit val f0 = new scalaz.Functor[TreeF2] {
-    override def map[A, B](fa: TreeF2[A])(f: A => B): TreeF2[B] = {
+    override def map[A, B](fa: TreeF2[A])(f: A ⇒ B): TreeF2[B] = {
       fa match {
-        case  BranchF2(a,b) => BranchF2(f(a),f(b))
-        case  LeafF2(v) => LeafF2(v)
+        case BranchF2(a, b) ⇒ BranchF2(f(a), f(b))
+        case LeafF2(v)      ⇒ LeafF2(v)
       }
     }
   }
@@ -269,18 +264,18 @@ object Tournament {
   final case class LeafOfTwo[A](a: A, b: A) extends Tree3[A]
 
   implicit val functor = new scalaz.Functor[Tree3] {
-    override def map[A, B](fa: Tree3[A])(f: A => B): Tree3[B] = fa match {
-      case Child1(l)       => Child1(l)
-      case Child2(a,b)     => Child2(a,b)
-      case Child3(a,b,c)   => Child3(a,b,c)
-      case Child4(a,b,c,d) => Child4(a,b,c,d)
-      case LeafOfTwo(a,b)  => LeafOfTwo(f(a), f(b))
+    override def map[A, B](fa: Tree3[A])(f: A ⇒ B): Tree3[B] = fa match {
+      case Child1(l)          ⇒ Child1(l)
+      case Child2(a, b)       ⇒ Child2(a, b)
+      case Child3(a, b, c)    ⇒ Child3(a, b, c)
+      case Child4(a, b, c, d) ⇒ Child4(a, b, c, d)
+      case LeafOfTwo(a, b)    ⇒ LeafOfTwo(f(a), f(b))
     }
   }
 
   def evalCount: Algebra[TreeF2, Long] = {
-    case LeafF2(a)        => a.id
-    case BranchF2(a, b)   => a + b
+    case LeafF2(a)      ⇒ a.id
+    case BranchF2(a, b) ⇒ a + b
   }
 
   /*def evalCount2: Algebra[Tree3, Tree3] = {
@@ -292,19 +287,19 @@ object Tournament {
   }*/
 
   def print: Algebra[Tree3, Unit] = {
-    case Child1(l) =>
+    case Child1(l) ⇒
       println(l.id)
-    case LeafOfTwo(_,_) =>
+    case LeafOfTwo(_, _) ⇒
       println("----")
   }
 
   def anaM[T](in: List[L])(implicit T: Corecursive.Aux[T, Tree3]): T = {
     in match {
-      case a :: Nil =>
+      case a :: Nil ⇒
         Child1[T](a).embed
-      case a :: b :: Nil =>
+      case a :: b :: Nil ⇒
         LeafOfTwo[T](Child1[T](a).embed, Child1[T](b).embed).embed
-      case xs =>
+      case xs ⇒
         assert(xs.size % 2 == 0)
         val (l, r) = xs.splitAt(xs.size / 2)
         LeafOfTwo[T](anaM(l), anaM(r)).embed
@@ -326,9 +321,9 @@ object Tournament {
 
   val in =
     List(
-      L(1,"21/02/2016", "26/02/2016"), L(12, "21/02/2016", "26/02/2016"), L(13, "21/02/2016", "26/02/2016"),
-        L(2, "26/02/2016", "28/02/2016"), L(21, "21/02/2016", "26/02/2016"), L(22, "21/02/2016", "26/02/2016"),
-        L(23, "21/02/2016", "26/02/2016"), L(24, "21/02/2016", "26/02/2016"))
+      L(1, "21/02/2016", "26/02/2016"), L(12, "21/02/2016", "26/02/2016"), L(13, "21/02/2016", "26/02/2016"),
+      L(2, "26/02/2016", "28/02/2016"), L(21, "21/02/2016", "26/02/2016"), L(22, "21/02/2016", "26/02/2016"),
+      L(23, "21/02/2016", "26/02/2016"), L(24, "21/02/2016", "26/02/2016"))
 
   anaM[Fix[Tree3]](in).cata(print)
   anaM[Nu[Tree3]](in).cata(print)

@@ -1,9 +1,8 @@
 package sample.blog
 
-
 import akka.cluster.Cluster
 import akka.remote.testconductor.RoleName
-import akka.remote.testkit.{MultiNodeConfig, MultiNodeSpec}
+import akka.remote.testkit.{ MultiNodeConfig, MultiNodeSpec }
 import akka.testkit.ImplicitSender
 import com.typesafe.config.ConfigFactory
 import org.apache.commons.io.FileUtils

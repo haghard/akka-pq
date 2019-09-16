@@ -2,8 +2,7 @@ package sample.blog.identity
 
 import akka.actor.ActorSystem
 import com.typesafe.config.ConfigFactory
-import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
-
+import akka.cluster.sharding.{ ClusterSharding, ClusterShardingSettings }
 
 //runMain sample.blog.identity.IdentityApp 2551
 //runMain sample.blog.identity.IdentityApp 2553
@@ -15,7 +14,7 @@ object IdentityApp {
   }
 
   def startup(ports: Seq[String]): Unit = {
-    ports.foreach { port =>
+    ports.foreach { port ⇒
       val config = ConfigFactory.parseString("akka.remote.netty.tcp.port=" + port)
         .withFallback(ConfigFactory.load())
 
@@ -32,8 +31,8 @@ object IdentityApp {
       */
 
       if (port != "2551" && port != "2552") {
-        val region = system.actorOf(IdentityMatcher.props, "matcher")
-        system.actorOf(KafkaConsumerBot.props(region), "identity-bot")
+        system.actorOf(IdentAppActor.props, "ident-app")
+
       }
     }
   }

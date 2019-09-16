@@ -37,7 +37,6 @@ object ConfigValidation {
 
   val settings = toHList(MySettings("orders", 3.seconds, HttpConfig("192.168.0.1", 9042)))
 
-
   //create("192.168.0.1", 9042)
 
   /*

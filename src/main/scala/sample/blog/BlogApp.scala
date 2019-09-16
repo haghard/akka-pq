@@ -1,8 +1,8 @@
 package sample.blog
 
-import akka.actor.{ActorSystem, Props}
+import akka.actor.{ ActorSystem, Props }
 import com.typesafe.config.ConfigFactory
-import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
+import akka.cluster.sharding.{ ClusterSharding, ClusterShardingSettings }
 
 /*
   CREATE TABLE blogs.blogs_journal (
@@ -25,7 +25,6 @@ import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
   ) WITH CLUSTERING ORDER BY (sequence_nr ASC, timestamp ASC, timebucket ASC)
 */
 
-
 //docker run -m 600M -it -p 7000:7000 -p 7001:7001 -p 9042:9042 -p 9160:9160 -p 7199:7199 -v /Volumes/dev/cassandra-db/blogs:/var/lib/cassandra -e JVM_OPTS="-Xms500M -Xmx500M" cassandra:3.11.2
 //runMain sample.blog.BlogApp 2551
 //runMain sample.blog.BlogApp 2552
@@ -37,7 +36,7 @@ object BlogApp {
   }
 
   def startup(ports: Seq[String]): Unit = {
-    ports.foreach { port =>
+    ports.foreach { port ⇒
       val config = ConfigFactory.parseString("akka.remote.netty.tcp.port=" + port)
         .withFallback(ConfigFactory.load())
 
@@ -45,17 +44,17 @@ object BlogApp {
       implicit val system = ActorSystem("blog", config)
 
       val authorListingRegion = ClusterSharding(system).start(
-        typeName = AuthorListing.shardName,
-        entityProps = AuthorListing.props(),
-        settings = ClusterShardingSettings(system).withRememberEntities(true),
+        typeName        = AuthorListing.shardName,
+        entityProps     = AuthorListing.props(),
+        settings        = ClusterShardingSettings(system).withRememberEntities(true),
         extractEntityId = AuthorListing.idExtractor,
-        extractShardId = AuthorListing.shardResolver)
+        extractShardId  = AuthorListing.shardResolver)
       ClusterSharding(system).start(
-        typeName = Post.shardName,
-        entityProps = Post.props(authorListingRegion),
-        settings = ClusterShardingSettings(system).withRememberEntities(true),
+        typeName        = Post.shardName,
+        entityProps     = Post.props(authorListingRegion),
+        settings        = ClusterShardingSettings(system).withRememberEntities(true),
         extractEntityId = Post.idExtractor,
-        extractShardId = Post.shardResolver)
+        extractShardId  = Post.shardResolver)
 
       if (port != "2551" && port != "2552")
         system.actorOf(Props[Bot], "bot")

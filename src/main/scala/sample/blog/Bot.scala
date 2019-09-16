@@ -27,14 +27,14 @@ class Bot extends Actor with ActorLogging {
   }
 
   var n = 0
-  val authors = Map(0 -> "Patrik", 1 -> "Martin", 2 -> "Roland"/*, 3 -> "Bjorn", 4 -> "Endre", 5 -> "Konrad"*/)
+  val authors = Map(0 -> "Patrik", 1 -> "Martin", 2 -> "Roland" /*, 3 -> "Bjorn", 4 -> "Endre", 5 -> "Konrad"*/ )
 
   def currentAuthor = authors(n % authors.size)
 
   def receive = create
 
   val create: Receive = {
-    case Tick =>
+    case Tick ⇒
       val postId = UUID.randomUUID.toString
       n += 1
       val title = s"Post $n from $from"
@@ -43,21 +43,21 @@ class Bot extends Actor with ActorLogging {
   }
 
   def edit(postId: String): Receive = {
-    case Tick =>
+    case Tick ⇒
       postRegion ! Post.ChangeBody(postId, "Something very interesting ...")
       context become publish(postId)
   }
 
   def publish(postId: String): Receive = {
-    case Tick =>
+    case Tick ⇒
       postRegion ! Post.Publish(postId)
       context become list
   }
 
   val list: Receive = {
-    case Tick =>
+    case Tick ⇒
       listingsRegion ! AuthorListing.GetPosts(currentAuthor)
-    case AuthorListing.Posts(summaries) =>
+    case AuthorListing.Posts(summaries) ⇒
       log.info("Posts by {}: {}", currentAuthor, summaries.map(_.title).mkString("\n\t", "\n\t", ""))
       context become create
   }

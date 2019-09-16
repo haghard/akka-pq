@@ -34,12 +34,12 @@ object Post {
   case object PostPublished extends Event
 
   val idExtractor: ShardRegion.ExtractEntityId = {
-    case cmd: Command => (cmd.postId, cmd)
+    case cmd: Command ⇒ (cmd.postId, cmd)
   }
 
   val numberOfShards = 100
   val shardResolver: ShardRegion.ExtractShardId = {
-    case cmd: Command =>
+    case cmd: Command ⇒
       (math.abs(cmd.postId.hashCode) % numberOfShards).toString
     case ShardRegion.StartEntity(id) ⇒
       // StartEntity is used by remembering entities feature
@@ -50,9 +50,9 @@ object Post {
 
   private case class State(content: PostContent, published: Boolean) {
     def updated(evt: Event): State = evt match {
-      case PostAdded(c)   => copy(content = c)
-      case BodyChanged(b) => copy(content = content.copy(body = b))
-      case PostPublished  => copy(published = true)
+      case PostAdded(c)   ⇒ copy(content = c)
+      case BodyChanged(b) ⇒ copy(content = content.copy(body = b))
+      case PostPublished  ⇒ copy(published = true)
     }
   }
 }
@@ -75,24 +75,24 @@ class Post(author: ActorRef) extends PersistentActor with ActorLogging {
   private var state = State(PostContent.empty, false)
 
   override def receiveRecover: Receive = {
-    case evt: PostAdded =>
+    case evt: PostAdded ⇒
       context.become(created)
       state = state.updated(evt)
-    case evt @ PostPublished =>
+    case evt @ PostPublished ⇒
       context.become(published)
       state = state.updated(evt)
-    case evt: Event => state =
+    case evt: Event ⇒ state =
       state.updated(evt)
   }
 
   override def receiveCommand = initial
 
   def initial: Receive = {
-    case GetContent(_) =>
+    case GetContent(_) ⇒
       sender() ! state.content
-    case AddPost(_, content) =>
+    case AddPost(_, content) ⇒
       if (content.author != "" && content.title != "")
-        persist(PostAdded(content)) { evt =>
+        persist(PostAdded(content)) { evt ⇒
           state = state.updated(evt)
           context.become(created)
           log.info("New post saved: {}", state.content.title)
@@ -100,15 +100,15 @@ class Post(author: ActorRef) extends PersistentActor with ActorLogging {
   }
 
   def created: Receive = {
-    case GetContent(_) =>
+    case GetContent(_) ⇒
       sender() ! state.content
-    case ChangeBody(_, body) =>
-      persist(BodyChanged(body)) { evt =>
+    case ChangeBody(_, body) ⇒
+      persist(BodyChanged(body)) { evt ⇒
         state = state.updated(evt)
         log.info("Post changed: {}", state.content.title)
       }
-    case Publish(postId) =>
-      persist(PostPublished) { evt =>
+    case Publish(postId) ⇒
+      persist(PostPublished) { evt ⇒
         state = state.updated(evt)
         context.become(published)
         val c = state.content
@@ -118,12 +118,12 @@ class Post(author: ActorRef) extends PersistentActor with ActorLogging {
   }
 
   def published: Receive = {
-    case GetContent(_) => sender() ! state.content
+    case GetContent(_) ⇒ sender() ! state.content
   }
 
   override def unhandled(msg: Any): Unit = msg match {
-    case ReceiveTimeout => context.parent ! Passivate(stopMessage = PoisonPill)
-    case _              => super.unhandled(msg)
+    case ReceiveTimeout ⇒ context.parent ! Passivate(stopMessage = PoisonPill)
+    case _              ⇒ super.unhandled(msg)
   }
 
 }

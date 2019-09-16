@@ -16,17 +16,17 @@ object Polymorphic {
   */
 
   trait DeconstructEither[F[_, _]] {
-    def either[A, B, C](left: A => C, right: B => C)(e: F[A, B]): C
+    def either[A, B, C](left: A ⇒ C, right: B ⇒ C)(e: F[A, B]): C
   }
 
   implicit val Dec = new DeconstructEither[scala.util.Either] {
-    override def either[A, B, C](left: (A) => C, right: (B) => C)(e: scala.util.Either[A, B]): C = {
+    override def either[A, B, C](left: (A) ⇒ C, right: (B) ⇒ C)(e: scala.util.Either[A, B]): C = {
       e.fold(left(_), right(_))
     }
   }
 
   def leftOrElse[F[_, _], A, B](a: A, e: F[A, B])(implicit E: DeconstructEither[F]): A =
-    E.either[A, B, A]({ a: A => a }, Function.const(a))(e)
+    E.either[A, B, A]({ a: A ⇒ a }, Function.const(a))(e)
 
   trait EitherConstructor[F[_, _], A, B] {
     def left(a: A): F[A, B]
@@ -41,9 +41,10 @@ object Polymorphic {
   }
 
   implicit val E = new EitherDeconstruct[scala.util.Either]() {
-    override def deconstruct[A, B](fa: scala.util.Either[A, B],
+    override def deconstruct[A, B](
+      fa: scala.util.Either[A, B],
       C: EitherConstructor[scala.util.Either, A, B]): scala.util.Either[A, B] = {
-      fa.fold({ a: A => C.left(a) }, { b: B => C.right(b) })
+      fa.fold({ a: A ⇒ C.left(a) }, { b: B ⇒ C.right(b) })
     }
   }
 
@@ -57,7 +58,6 @@ object Polymorphic {
 
   //eitherC.construct[String, Int].left("testing")
   //eitherC.construct[String, Int].right(1)
-
 
   E.deconstruct(Left("as"), C.construct[String, Int])
 

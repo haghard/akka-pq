@@ -1,7 +1,7 @@
 package sample.blog.stages
 
-import akka.actor.{Actor, ActorRef, ActorSystem, Props, Stash}
-import akka.stream.scaladsl.{Sink, Source}
+import akka.actor.{ Actor, ActorRef, ActorSystem, Props, Stash }
+import akka.stream.scaladsl.{ Sink, Source }
 import akka.stream.stage.GraphStageLogic.StageActor
 import akka.stream.stage._
 import akka.stream._
@@ -22,14 +22,14 @@ object ActorSource {
 
     val publisher: ActorRef = system.actorOf(Props(new Actor with Stash {
       def receive: Receive = {
-        case _: String => stash()
-        case s: InstallSource =>
+        case _: String ⇒ stash()
+        case s: InstallSource ⇒
           unstashAll()
           context become active(s.actorRef)
       }
 
       def active(actor: ActorRef): Receive = {
-        case msg: String =>
+        case msg: String ⇒
           log.info("Actor received message, forwarding to stream: {} ", msg)
           actor ! msg
       }
@@ -98,11 +98,11 @@ class ActorSource(actor: ActorRef) extends GraphStage[SourceShape[String]] {
 
       def onReceive(x: (ActorRef, Any)): Unit = {
         x._2 match {
-          case msg: String =>
+          case msg: String ⇒
             log.info("published: {} ", msg)
             buffer enqueue msg
           //tryToPush()
-          case other =>
+          case other ⇒
             failStage(
               throw new Exception(
                 s"Unexpected message type ${other.getClass.getSimpleName}"))

@@ -9,7 +9,6 @@ object Events {
   //https://t.co/gKsnOpK2kk
   //https://gist.github.com/aaronlevin/d3911ba50d8f5253c85d2c726c63947b
 
-
   //Heterogeneous Event Sink
 
   sealed trait Command {
@@ -69,7 +68,6 @@ object Events {
     def handleEvent(eventName: String, payload: String) = Left(s"Did not find an event $eventName")
   }
 
-
   // A typeclass for types that can be parsed from strings.
   trait Parser[E] {
     def fromString(line: String): Option[E]
@@ -78,9 +76,9 @@ object Events {
   // Parser instances for our types.
   implicit val createdFromString = new Parser[OrderCreated] {
     override def fromString(s: String) = s.split('\t').toList match {
-      case id :: user :: Nil =>
-        safeToLong(id).map(id => OrderCreated(id, user))
-      case _ => None
+      case id :: user :: Nil ⇒
+        safeToLong(id).map(id ⇒ OrderCreated(id, user))
+      case _ ⇒ None
     }
   }
 
@@ -89,38 +87,36 @@ object Events {
     try {
       Some(s.toLong)
     } catch {
-      case _: java.lang.NumberFormatException => None
+      case _: java.lang.NumberFormatException ⇒ None
     }
-
 
   implicit val playFromString = new Parser[OrderUpdated] {
     def fromString(s: String) = s.split('\t').toList match {
-      case id :: user :: trackId :: Nil =>
-        safeToLong(id).flatMap { id =>
-          safeToLong(trackId).map { trackId =>
+      case id :: user :: trackId :: Nil ⇒
+        safeToLong(id).flatMap { id ⇒
+          safeToLong(trackId).map { trackId ⇒
             OrderUpdated(id, user, trackId)
           }
         }
 
-      case _ => None
+      case _ ⇒ None
     }
   }
 
   implicit val pauseFromString = new Parser[OrderSubmitted] {
     def fromString(s: String) = s.split('\t').toList match {
-      case id :: user :: trackId :: ts :: Nil =>
-        safeToLong(id).flatMap { id =>
-          safeToLong(trackId).flatMap { trackId =>
-            safeToLong(ts).map { ts =>
+      case id :: user :: trackId :: ts :: Nil ⇒
+        safeToLong(id).flatMap { id ⇒
+          safeToLong(trackId).flatMap { trackId ⇒
+            safeToLong(ts).map { ts ⇒
               OrderSubmitted(id, user, trackId, ts)
             }
           }
         }
 
-      case _ => None
+      case _ ⇒ None
     }
   }
-
 
   // HandleEvents: induction step (E, Tail)
   implicit def inductionStepHandleEvents[E, Tail](implicit namedEvent: ParsedCmd[E], parser: Parser[E], handler: EventHandler[Tail]) =
@@ -131,21 +127,20 @@ object Events {
         println("Handle's induction step: " + eventName)
         if (eventName == namedEvent.name) {
           parser.fromString(line) match {
-            case None => Left(s"""Could not decode event "$eventName" with payload "$line"""")
-            case Some(e) => Right(Right(e))
+            case None    ⇒ Left(s"""Could not decode event "$eventName" with payload "$line"""")
+            case Some(e) ⇒ Right(Right(e))
           }
         } else {
           handler.handleEvent(eventName, line) match {
-            case Left(e) => Left(e)
-            case Right(e) => Right(Left(e))
+            case Left(e)  ⇒ Left(e)
+            case Right(e) ⇒ Right(Left(e))
           }
         }
       }
     }
 
-  def handleEvent[Events](eventName: String, payload: String)
-      (implicit names: EventHandler[Events]): Either[String, names.Out] =
-        names.handleEvent(eventName, payload)
+  def handleEvent[Events](eventName: String, payload: String)(implicit names: EventHandler[Events]): Either[String, names.Out] =
+    names.handleEvent(eventName, payload)
 
   println(s"Protocol events ${getNamed[OrderProtocol]}")
 

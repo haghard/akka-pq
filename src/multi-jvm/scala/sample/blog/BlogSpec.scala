@@ -6,9 +6,9 @@ import java.util.UUID
 import scala.concurrent.duration._
 import org.apache.commons.io.FileUtils
 import com.typesafe.config.ConfigFactory
-import akka.actor.{ActorIdentity, Identify, Props}
+import akka.actor.{ ActorIdentity, Identify, Props }
 import akka.cluster.Cluster
-import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
+import akka.cluster.sharding.{ ClusterSharding, ClusterShardingSettings }
 import akka.persistence.Persistence
 import akka.persistence.journal.leveldb.SharedLeveldbJournal
 import akka.persistence.journal.leveldb.SharedLeveldbStore
@@ -48,7 +48,6 @@ class BlogSpecMultiJvmNode1 extends BlogSpec
 class BlogSpecMultiJvmNode2 extends BlogSpec
 class BlogSpecMultiJvmNode3 extends BlogSpec
 
-
 class BlogSpec extends MultiNodeSpec(BlogSpec)
   with STMultiNodeSpec with ImplicitSender {
 
@@ -59,17 +58,17 @@ class BlogSpec extends MultiNodeSpec(BlogSpec)
   val storageLocations = List(
     "akka.persistence.journal.leveldb.dir",
     "akka.persistence.journal.leveldb-shared.store.dir",
-    "akka.persistence.snapshot-store.local.dir").map(s => new File(system.settings.config.getString(s)))
+    "akka.persistence.snapshot-store.local.dir").map(s ⇒ new File(system.settings.config.getString(s)))
 
   override protected def atStartup() {
     runOn(controller) {
-      storageLocations.foreach(dir => FileUtils.deleteDirectory(dir))
+      storageLocations.foreach(dir ⇒ FileUtils.deleteDirectory(dir))
     }
   }
 
   override protected def afterTermination() {
     runOn(controller) {
-      storageLocations.foreach(dir => FileUtils.deleteDirectory(dir))
+      storageLocations.foreach(dir ⇒ FileUtils.deleteDirectory(dir))
     }
   }
 
@@ -83,17 +82,17 @@ class BlogSpec extends MultiNodeSpec(BlogSpec)
 
   def startSharding(): Unit = {
     ClusterSharding(system).start(
-      typeName = AuthorListing.shardName,
-      entityProps = AuthorListing.props(),
-      settings = ClusterShardingSettings(system),
+      typeName        = AuthorListing.shardName,
+      entityProps     = AuthorListing.props(),
+      settings        = ClusterShardingSettings(system),
       extractEntityId = AuthorListing.idExtractor,
-      extractShardId = AuthorListing.shardResolver)
+      extractShardId  = AuthorListing.shardResolver)
     ClusterSharding(system).start(
-      typeName = Post.shardName,
-      entityProps = Post.props(ClusterSharding(system).shardRegion(AuthorListing.shardName)),
-      settings = ClusterShardingSettings(system),
+      typeName        = Post.shardName,
+      entityProps     = Post.props(ClusterSharding(system).shardRegion(AuthorListing.shardName)),
+      settings        = ClusterShardingSettings(system),
       extractEntityId = Post.idExtractor,
-      extractShardId = Post.shardResolver)
+      extractShardId  = Post.shardResolver)
   }
 
   "Sharded blog app" must {
@@ -126,9 +125,11 @@ class BlogSpec extends MultiNodeSpec(BlogSpec)
 
       runOn(node1) {
         val postRegion = ClusterSharding(system).shardRegion(Post.shardName)
-        postRegion ! Post.AddPost(postId,
+        postRegion ! Post.AddPost(
+          postId,
           Post.PostContent("Patrik", "Sharding algorithms", "Splitting shards..."))
-        postRegion ! Post.ChangeBody(postId,
+        postRegion ! Post.ChangeBody(
+          postId,
           "Splitting shards across multiple...")
       }
 
@@ -149,7 +150,8 @@ class BlogSpec extends MultiNodeSpec(BlogSpec)
       runOn(node1) {
         val postRegion = ClusterSharding(system).shardRegion(Post.shardName)
         val postId = UUID.randomUUID().toString
-        postRegion ! Post.AddPost(postId,
+        postRegion ! Post.AddPost(
+          postId,
           Post.PostContent("Patrik", "Hash functions", "A hash function should be deterministic..."))
         postRegion ! Post.Publish(postId)
       }

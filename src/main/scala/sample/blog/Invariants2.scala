@@ -21,17 +21,17 @@ object Invariants2 {
 
     def apply(a: A)(implicit s: Semigroup[E]): Validated[E, A] =
       this match {
-        case Pure(func) => func(a)
-        case And(left, right) =>
-          cats.Apply[Validated[E, ?]].map2(left(a), right(a))((b,c) => a)
-          //(left(a), right(a)).mapN { _ /*(_, _)*/ => a }
-        case Or(left, right) =>
+        case Pure(func) ⇒ func(a)
+        case And(left, right) ⇒
+          cats.Apply[Validated[E, ?]].map2(left(a), right(a))((b, c) ⇒ a)
+        //(left(a), right(a)).mapN { _ /*(_, _)*/ => a }
+        case Or(left, right) ⇒
           left(a) match {
-            case Valid(a1) => Valid(a)
-            case Invalid(e1) =>
+            case Valid(a1) ⇒ Valid(a)
+            case Invalid(e1) ⇒
               right(a) match {
-                case Valid(a2) => Valid(a)
-                case Invalid(e2) => Invalid(e1 |+| e2)
+                case Valid(a2)   ⇒ Valid(a)
+                case Invalid(e2) ⇒ Invalid(e1 |+| e2)
               }
           }
       }
@@ -42,13 +42,13 @@ object Invariants2 {
 
     final case class Or[E, A](left: Predicate[E, A], right: Predicate[E, A]) extends Predicate[E, A]
 
-    final case class Pure[E, A](func: A => Validated[E, A]) extends Predicate[E, A]
+    final case class Pure[E, A](func: A ⇒ Validated[E, A]) extends Predicate[E, A]
 
-    def apply[E, A](f: A => Validated[E, A]): Predicate[E, A] =
+    def apply[E, A](f: A ⇒ Validated[E, A]): Predicate[E, A] =
       Pure(f)
 
-    def lift[E, A](error: E, func: A => Boolean): Predicate[E, A] =
-      Pure(a => if (func(a)) a.valid else error.invalid)
+    def lift[E, A](error: E, func: A ⇒ Boolean): Predicate[E, A] =
+      Pure(a ⇒ if (func(a)) a.valid else error.invalid)
   }
 
   sealed trait Check[E, A, B] {
@@ -56,10 +56,10 @@ object Invariants2 {
 
     def apply(in: A)(implicit s: Semigroup[E]): Validated[E, B]
 
-    def map[C](f: B => C): Check[E, A, C] =
+    def map[C](f: B ⇒ C): Check[E, A, C] =
       Map[E, A, B, C](this, f)
 
-    def flatMap[C](f: B => Check[E, A, C]) =
+    def flatMap[C](f: B ⇒ Check[E, A, C]): FlatMap[E, A, B, C] =
       FlatMap[E, A, B, C](this, f)
 
     def andThen[C](next: Check[E, B, C]): Check[E, A, C] =
@@ -67,24 +67,24 @@ object Invariants2 {
   }
 
   object Check {
-    final case class Map[E, A, B, C](check: Check[E, A, B], f: B => C) extends Check[E, A, C] {
+    final case class Map[E, A, B, C](check: Check[E, A, B], f: B ⇒ C) extends Check[E, A, C] {
       override def apply(a: A)(implicit s: Semigroup[E]): Validated[E, C] =
         check(a) map f
     }
 
-    final case class FlatMap[E, A, B, C](check: Check[E, A, B], f: B => Check[E, A, C]) extends Check[E, A, C] {
+    final case class FlatMap[E, A, B, C](check: Check[E, A, B], f: B ⇒ Check[E, A, C]) extends Check[E, A, C] {
       override def apply(a: A)(implicit s: Semigroup[E]): Validated[E, C] =
-        check(a).withEither(_.flatMap(b => f(b)(a).toEither))
+        check(a).withEither(_.flatMap(b ⇒ f(b)(a).toEither))
     }
 
     final case class AndThen[E, A, B, C](check: Check[E, A, B], next: Check[E, B, C]) extends Check[E, A, C] {
       override def apply(a: A)(implicit s: Semigroup[E]): Validated[E, C] =
         check(a).withEither {
-          _.flatMap(b => next(b).toEither)
+          _.flatMap(b ⇒ next(b).toEither)
         }
     }
 
-    final case class Pure[E, A, B](f: A => Validated[E, B]) extends Check[E, A, B] {
+    final case class Pure[E, A, B](f: A ⇒ Validated[E, B]) extends Check[E, A, B] {
       override def apply(a: A)(implicit s: Semigroup[E]): Validated[E, B] = f(a)
     }
 
@@ -94,7 +94,8 @@ object Invariants2 {
 
     def apply[E, A](p: Predicate[E, A]): Check[E, A, A] = PurePredicate(p)
 
-    def apply[E, A, B](func: A => Validated[E, B]): Check[E, A, B] =
+    def apply[E, A, B](func: A ⇒ Validated[E, B]): Check[E, A, B] =
       Pure(func)
   }
+
 }

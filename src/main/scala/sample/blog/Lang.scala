@@ -34,13 +34,13 @@ object Lang {
 
   sealed trait NumberT[A]
   object NumberT {
-    implicit val IntNumberLike = new NumberT[Type.Int] { }
-    implicit val DecNumberLike = new NumberT[Type.Dec] { }
+    implicit val IntNumberLike = new NumberT[Type.Int] {}
+    implicit val DecNumberLike = new NumberT[Type.Dec] {}
   }
 
   import Type._
 
-  trait DatasetOps[F[_]]  {
+  trait DatasetOps[F[_]] {
     def empty[A <: Type]: F[A]
     def root: F[Type.Unknown]
     def read(path: String): F[Unknown]
@@ -52,12 +52,12 @@ object Lang {
     def apply[F[_]](implicit F: DatasetOps[F]): DatasetOps[F] = F
   }
 
-  trait Dataset[A <: Type] { self =>
+  trait Dataset[A <: Type] { self ⇒
     def apply[F[_]](implicit F: DatasetOps[F]): F[A]
 
     def typed[B <: Type: LangType]: Dataset[B] = map(_.typed[B])
 
-    def map[B <: Type](f: Mapping[A, A] => Mapping[A, B]): Dataset[B] = new Dataset[B] {
+    def map[B <: Type](f: Mapping[A, A] ⇒ Mapping[A, B]): Dataset[B] = new Dataset[B] {
       def apply[F[_]: DatasetOps]: F[B] = DatasetOps[F].map(self.apply[F], f(Mapping.id[A]))
     }
 
@@ -76,14 +76,14 @@ object Lang {
     }
   }
 
-  trait Mapping[A <: Type, B <: Type] extends Dynamic { self =>
+  trait Mapping[A <: Type, B <: Type] extends Dynamic { self ⇒
     def apply[F[_]: MappingOps](v: F[A]): F[B]
 
-    def + (that: Mapping[A, B])(implicit N: NumberT[B]): Mapping[A, B] = new Mapping[A, B] {
+    def +(that: Mapping[A, B])(implicit N: NumberT[B]): Mapping[A, B] = new Mapping[A, B] {
       def apply[F[_]: MappingOps](v: F[A]): F[B] = MappingOps[F].add(self(v), that(v))
     }
 
-    def - (that: Mapping[A, B])(implicit N: NumberT[B]): Mapping[A, B] = new Mapping[A, B] {
+    def -(that: Mapping[A, B])(implicit N: NumberT[B]): Mapping[A, B] = new Mapping[A, B] {
       def apply[F[_]: MappingOps](v: F[A]): F[B] = MappingOps[F].subtract(self(v), that(v))
     }
 
@@ -108,7 +108,8 @@ object Lang {
     def apply[F[_]](implicit F: MappingOps[F]): MappingOps[F] = F
   }
 
-  Dataset.load("\\usr\\temp").typed[Type.Int].map { i => i + i }
+  Dataset.load("\\usr\\temp").typed[Type.Int]
+    .map { i ⇒ i + i }
 }
 
 /*
@@ -134,4 +135,4 @@ object Lang {
   def add(a: Dsl[Int], b: Dsl[Int]) = new Dsl[Int] {
     override def apply[F[_]](implicit F: Expr[F]) = F.add(a.apply[F], b.apply[F])
   }
-*/
+*/ 

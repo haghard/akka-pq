@@ -8,7 +8,7 @@ import shapeless._
 
 import scala.reflect.ClassTag
 import scala.util.Try
-import cats.data.{NonEmptyList, Validated, ValidatedNel}
+import cats.data.ValidatedNel
 import cats.implicits._
 import cats.data.Validated._
 
@@ -27,55 +27,52 @@ package object blog {
 
   val schema = Seq(PersistenceId, PartitionNr, SequenceNr, Timestamp, Timebucket, Event)
 
-  trait CasCodec[DbType, JvmType] extends (Row => ErrorsOr[JvmType])
+  trait ColumnCodec[DbType, JvmType] extends (Row ⇒ ErrorsOr[JvmType])
 
-  trait ColumnCodec[ColumnName] {
+  trait ColumnReader[ColumnName] {
     type DbType
-    type JvmType
+    type JvmType //type member
 
-    def codec: CasCodec[DbType, JvmType]
+    def codec: ColumnCodec[DbType, JvmType]
   }
 
-  implicit val persistenceIdCodec = new ColumnCodec[PersistenceId.T] {
+  implicit val persistenceIdCodec = new ColumnReader[PersistenceId.T] {
     override type DbType = String
     override type JvmType = String
 
-    override def codec: CasCodec[DbType, JvmType] =
-      (r: Row) =>
+    override def codec: ColumnCodec[DbType, JvmType] =
+      (r: Row) ⇒
         Try(r.getString(PersistenceId.value))
-          .fold({ ex => invalidNel(PersistenceId.value + ":" + ex.getMessage) }, validNel(_))
+          .fold({ ex ⇒ invalidNel(PersistenceId.value + ":" + ex.getMessage) }, validNel(_))
   }
 
-  implicit val partitionNrCodec = new ColumnCodec[PartitionNr.T] {
+  implicit val partitionNrCodec = new ColumnReader[PartitionNr.T] {
     override type DbType = Long
     override type JvmType = Long
 
-    override def codec: CasCodec[DbType, JvmType] = (r: Row) =>
+    override def codec: ColumnCodec[DbType, JvmType] = (r: Row) ⇒
       Try(r.getLong(PartitionNr.value))
-        .fold({ ex => invalidNel(PartitionNr.value + ":" + ex.getMessage) }, validNel(_))
+        .fold({ ex ⇒ invalidNel(PartitionNr.value + ":" + ex.getMessage) }, validNel(_))
 
   }
 
-  implicit val sequenceNrCodec = new ColumnCodec[SequenceNr.T] {
+  implicit val sequenceNrCodec = new ColumnReader[SequenceNr.T] {
     override type DbType = Long
     override type JvmType = Long
 
-    override def codec: CasCodec[DbType, JvmType] = (r: Row) =>
+    override def codec: ColumnCodec[DbType, JvmType] = (r: Row) ⇒
       Try(r.getLong(SequenceNr.value))
-        .fold({ ex => invalidNel(SequenceNr.value + ":" + ex.getMessage) }, validNel(_))
+        .fold({ ex ⇒ invalidNel(SequenceNr.value + ":" + ex.getMessage) }, validNel(_))
   }
 
-  implicit val eventCodec = new ColumnCodec[Event.T] {
+  implicit val eventCodec = new ColumnReader[Event.T] {
     override type DbType = ByteBuffer
     override type JvmType = Array[Byte]
 
-    override def codec: CasCodec[DbType, JvmType] = (r: Row) =>
+    override def codec: ColumnCodec[DbType, JvmType] = (r: Row) ⇒
       Try(r.getBytes(Event.value).array)
-        .fold({ ex => invalidNel(Event.value + ":" + ex.getMessage) }, validNel(_))
+        .fold({ ex ⇒ invalidNel(Event.value + ":" + ex.getMessage) }, validNel(_))
   }
-
-
-
 
   trait Codec[A] {
     def apply(row: Row, fields: Vector[String], ind: Int): Option[A]
@@ -119,9 +116,8 @@ package object blog {
   }
 
   implicit object UUIDCodec extends Codec[UUID] {
-    override def apply(row: Row, fields: Vector[String], ind: Int): Option[UUID] = {
+    override def apply(row: Row, fields: Vector[String], ind: Int): Option[UUID] =
       Try(row.getUUID(fields(ind))).toOption
-    }
   }
 
   implicit object HNilCodec extends Codec[HNil] {
@@ -140,44 +136,52 @@ package object blog {
 */
 
   //induction
-  implicit def hlistParserCassandra[H: Codec, T <: HList : Codec]: Codec[H :: T] =
-    (row: Row, fieldNames: Vector[String], ind: Int) =>
+  implicit def hListParserCassandra[H: Codec, T <: HList: Codec]: Codec[H :: T] =
+    (row: Row, fieldNames: Vector[String], ind: Int) ⇒
       fieldNames match {
         case _ +: _ ⇒
           for {
-            //_ ← implicitly[Codec[H]].apply0(row, fields(acc))
             head ← implicitly[Codec[H]].apply(row, fieldNames, ind)
             tail ← implicitly[Codec[T]].apply(row, fieldNames, ind + 1)
           } yield head :: tail
       }
 
-  //case class parser
+  //typelevel case class parser
   implicit def caseClassParser[A, R <: HList](implicit gen: Generic.Aux[A, R], c: Codec[R]): Codec[A] =
-    (row: Row, fields: Vector[String], count: Int) =>
+    (row: Row, fields: Vector[String], count: Int) ⇒
       c.apply(row, fields, count).map(gen.from)
 
   implicit class CassandraRecordSyntax(val row: Row) extends AnyVal {
-    private def read[T](row: Row)(implicit c: ColumnCodec[T]): Validated[NonEmptyList[String], c.JvmType] =
+    private def read[T](row: Row)(implicit c: ColumnReader[T]): ErrorsOr[c.JvmType] =
       c.codec.apply(row)
 
-    def asTuple: (String, Long, Long, Array[Byte]) = {
-      //Using NonEmptyList to accumulate failures
+    //Uses NonEmptyList to accumulate failures
+    def asTypedRow: (String, Long, Long, Array[Byte]) = {
+      //val F = cats.Functor[ErrorsOr]
+      //cats.Semigroupal[ErrorsOr].product(read[PersistenceId.T](row), read[PartitionNr.T](row))
 
-      val validatedRow: Validated[NonEmptyList[String], (String, Long, Long, Array[Byte])] =
+      /*cats.Traverse[List].sequence(List(read[PersistenceId.T](row), read[PartitionNr.T](row),
+        read[SequenceNr.T](row), read[Event.T](row)))*/
+
+      val validatedRow: ErrorsOr[(String, Long, Long, Array[Byte])] =
+        cats.Semigroupal.map4(read[PersistenceId.T](row), read[PartitionNr.T](row),
+                              read[SequenceNr.T](row), read[Event.T](row))((_, _, _, _))
+
+      /*val validatedRow: Validated[NonEmptyList[String], (String, Long, Long, Array[Byte])] =
         cats.Apply[ErrorsOr].map4(
           read[PersistenceId.T](row), read[PartitionNr.T](row), read[SequenceNr.T](row),
-          read[Event.T](row))((_,_,_,_))
+          read[Event.T](row))((_,_,_,_))*/
 
       //with tuples
       /*((read[PersistenceId.T](row), read[PartitionNr.T](row),
         read[SequenceNr.T](row), read[Event.T](row))).mapN((_, _, _, _))*/
 
       validatedRow match {
-        case Invalid(ers) =>
+        case Invalid(ers) ⇒
           val errors = "Journal errs: " + ers.mkString_("[", "], [", "]")
           println(errors)
           throw new Exception(errors)
-        case Valid(tuple) =>
+        case Valid(tuple) ⇒
           tuple
       }
     }

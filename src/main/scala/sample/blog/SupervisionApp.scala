@@ -2,19 +2,18 @@ package sample.blog
 
 import akka.actor.Status.Failure
 import akka.actor.SupervisorStrategy.Decider
-import akka.actor.{Actor, ActorInitializationException, ActorLogging, ActorRef, ActorSystem, AllForOneStrategy, Props, SupervisorStrategy, Terminated}
+import akka.actor.{ Actor, ActorInitializationException, ActorLogging, ActorRef, ActorSystem, AllForOneStrategy, Props, SupervisorStrategy, Terminated }
 import com.typesafe.config.ConfigFactory
 
 import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{ Await, Future }
 import scala.io.StdIn
-
 
 class Observer(p: ActorRef) extends Actor with ActorLogging {
   context.watch(p)
 
   override def receive: Receive = {
-    case Terminated(`p`) =>
+    case Terminated(`p`) ⇒
       println(s"Terminated $p")
       context.stop(self)
   }
@@ -27,11 +26,11 @@ class Parent extends Actor with ActorLogging {
 
   override val supervisorStrategy: SupervisorStrategy = AllForOneStrategy()(
     {
-      case ActorInitializationException(actor, message, cause) =>
+      case ActorInitializationException(actor, message, cause) ⇒
         println(s"Parent caught a child Initialization failure : $message")
         context.stop(self)
         akka.actor.SupervisorStrategy.Stop
-      case ex: Throwable =>
+      case ex: Throwable ⇒
         println(s"Parent caught a child failure ${ex.getClass.getName} :" + ex.getMessage)
         context.stop(self)
         akka.actor.SupervisorStrategy.Stop
@@ -41,7 +40,7 @@ class Parent extends Actor with ActorLogging {
   context.actorOf(Props(new Child), "child-a")
 
   override def receive: Receive = {
-    case _ =>
+    case _ ⇒
   }
 }
 
@@ -65,10 +64,10 @@ class Child extends Actor with ActorLogging {
   }
 
   override def receive: Receive = {
-    case Failure(ex) =>
+    case Failure(ex) ⇒
       println(s"Failure in child:" + ex.getMessage)
       throw ex
-    case 'Work =>
+    case 'Work ⇒
       println("work")
   }
 }
