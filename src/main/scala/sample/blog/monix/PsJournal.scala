@@ -37,7 +37,7 @@ object PsJournal {
     implicit
     executionContext: ExecutionContext, session: Session
   ): Future[ResultSet] = {
-    println(s"fetch ${pId} - ${pNum}")
+    println(s"fetch $pId - $pNum")
     statement
       .map(_.bind(pId, pNum).setFetchSize(1 << 5))
       .flatMap(session.executeAsync(_))
@@ -59,8 +59,12 @@ object PsJournal {
       .flatMap { rs ⇒
         val available = rs.getAvailableWithoutFetching
         println(available)
-        val it = Iterator.fill(available)(rs.one)
-        Observable.fromIterator(it)
+        Observable.fromIterable(
+          new Iterable[Row]() {
+            val iterator: Iterator[Row] =
+              Iterator.fill(available)(rs.one)
+          }
+        )
         //import scala.collection.JavaConverters._
         //Observable.fromIterator(rs.iterator().asScala)
       }

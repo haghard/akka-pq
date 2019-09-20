@@ -31,7 +31,7 @@ object Post {
   sealed trait Event
   case class PostAdded(content: PostContent) extends Event
   case class BodyChanged(body: String) extends Event
-  case object PostPublished extends Event
+  /*case*/ object PostPublished extends Event
 
   val idExtractor: ShardRegion.ExtractEntityId = {
     case cmd: Command ⇒ (cmd.postId, cmd)
@@ -78,9 +78,11 @@ class Post(author: ActorRef) extends PersistentActor with ActorLogging {
     case evt: PostAdded ⇒
       context.become(created)
       state = state.updated(evt)
-    case evt @ PostPublished ⇒
+
+    case PostPublished ⇒
       context.become(published)
-      state = state.updated(evt)
+      state = state.updated(PostPublished)
+
     case evt: Event ⇒ state =
       state.updated(evt)
   }

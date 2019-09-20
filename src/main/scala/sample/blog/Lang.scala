@@ -49,7 +49,7 @@ object Lang {
   }
 
   object DatasetOps {
-    def apply[F[_]](implicit F: DatasetOps[F]): DatasetOps[F] = F
+    def apply[F[_]: DatasetOps](implicit F: DatasetOps[F]): DatasetOps[F] = F
   }
 
   trait Dataset[A <: Type] { self ⇒
@@ -71,7 +71,7 @@ object Lang {
       def apply[F[_]](implicit F: DatasetOps[F]): F[A] = F.empty[A]
     }
 
-    def load(path: String) = new Dataset[Unknown] {
+    def load(path: String): Dataset[Unknown] = new Dataset[Unknown] {
       override def apply[F[_]](implicit F: DatasetOps[F]): F[Unknown] = F.read(path)
     }
   }
@@ -111,28 +111,3 @@ object Lang {
   Dataset.load("\\usr\\temp").typed[Type.Int]
     .map { i ⇒ i + i }
 }
-
-/*
-  sealed trait Expr[F[_]] {
-    def int(v: Int): F[Int]
-    def str(v: String): F[String]
-    def add(a: F[Int], b: F[Int]): F[Int]
-    def concat(a: F[String], b: F[String]): F[String]
-  }
-
-  sealed trait Dsl[T] {
-    def apply[F[_]](implicit F: Expr[F]): F[T]
-  }
-
-  def int(v: Int) = new Dsl[Int] {
-    override def apply[F[_]](implicit F: Expr[F]) = F.int(v)
-  }
-
-  def str(v: String) = new Dsl[String] {
-    override def apply[F[_]](implicit F: Expr[F]) = ???
-  }
-
-  def add(a: Dsl[Int], b: Dsl[Int]) = new Dsl[Int] {
-    override def apply[F[_]](implicit F: Expr[F]) = F.add(a.apply[F], b.apply[F])
-  }
-*/ 

@@ -69,7 +69,7 @@ class ActorSource(actor: ActorRef) extends GraphStage[SourceShape[String]] {
         out,
         new OutHandler {
           override def onDownstreamFinish(): Unit = {
-            val result = buffer.result
+            val result = buffer
             if (result.nonEmpty) {
               log.debug(
                 "In order to avoid message lost we need to notify the upsteam that " +

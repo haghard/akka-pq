@@ -135,7 +135,7 @@ package object blog {
     }
 */
 
-  //induction
+  //induction step
   implicit def hListParserCassandra[H: Codec, T <: HList: Codec]: Codec[H :: T] =
     (row: Row, fieldNames: Vector[String], ind: Int) ⇒
       fieldNames match {

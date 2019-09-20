@@ -15,12 +15,11 @@ import cats.effect.IO
 // import sample.blog.InvariantsDsl
 object InvariantsDsl {
 
-  //type R[T] = Either[String, T]
+  type R[T] = ValidatedNel[String, T]
+  //type Errors = NonEmptyList[String]
+  //type R[T] = cats.data.Validated[Errors, T]
 
-  type Errors = NonEmptyList[String]
-  type R[T] = cats.data.Validated[Errors, T]
-
-  trait Combinators[F[_]] /*extends BinaryChecks[F]*/ {
+  trait Ops[F[_]] {
     def inSet[T](in: T, state: Set[T], msg: String): F[R[T]]
 
     def notInSet[T](in: T, state: Set[T], msg: String): F[R[T]]
@@ -42,52 +41,52 @@ object InvariantsDsl {
   }
 
   trait DslElement[T] {
-    def apply[F[_]](implicit F: Combinators[F]): F[T]
+    def apply[F[_]](implicit F: Ops[F]): F[T]
   }
 
   trait CheckProdDsl {
 
     def uniqueProd[T](in: T, state: Set[T]): DslElement[R[T]] = new DslElement[R[T]] {
-      override def apply[F[_]](implicit C: Combinators[F]): F[R[T]] = C.notInSet[T](in, state, "uniqueProductName")
+      override def apply[F[_]](implicit C: Ops[F]): F[R[T]] = C.notInSet[T](in, state, "uniqueProductName")
     }
 
     def knownProductName[T](in: T, state: Set[T]): DslElement[R[T]] = new DslElement[R[T]] {
-      override def apply[F[_]](implicit C: Combinators[F]): F[R[T]] = C.notInSet[T](in, state, "knownProductName")
+      override def apply[F[_]](implicit C: Ops[F]): F[R[T]] = C.notInSet[T](in, state, "knownProductName")
     }
 
     def knownProductOpt[T](in: Option[T], state: Map[T, _]): DslElement[R[T]] = new DslElement[R[T]] {
-      override def apply[F[_]](implicit C: Combinators[F]): F[R[T]] = C.maybeInMap[T](in, state, "knownProductOpt")
+      override def apply[F[_]](implicit C: Ops[F]): F[R[T]] = C.maybeInMap[T](in, state, "knownProductOpt")
     }
   }
 
   trait CheckSpecDsl {
 
     def knownSpec[T](in: T, state: Set[T]): DslElement[R[T]] = new DslElement[R[T]] {
-      override def apply[F[_]](implicit C: Combinators[F]): F[R[T]] = C.inSet[T](in, state, "knownSpecSet")
+      override def apply[F[_]](implicit C: Ops[F]): F[R[T]] = C.inSet[T](in, state, "knownSpecSet")
     }
 
     def uniqueSpec[T](in: T, state: Set[T]): DslElement[R[T]] = new DslElement[R[T]] {
-      override def apply[F[_]](implicit C: Combinators[F]): F[R[T]] = C.notInSet[T](in, state, "uniqueSpec")
+      override def apply[F[_]](implicit C: Ops[F]): F[R[T]] = C.notInSet[T](in, state, "uniqueSpec")
     }
 
     def knownSpec[T](in: T, state: Map[T, _]): DslElement[R[T]] = new DslElement[R[T]] {
-      override def apply[F[_]](implicit C: Combinators[F]): F[R[T]] = C.inMap[T](in, state, "knownSpecMap")
+      override def apply[F[_]](implicit C: Ops[F]): F[R[T]] = C.inMap[T](in, state, "knownSpecMap")
     }
 
     def knownSpec[T](in: Option[T], state: Map[T, _]): DslElement[R[T]] = new DslElement[R[T]] {
-      override def apply[F[_]](implicit C: Combinators[F]): F[R[T]] = C.maybeInMap[T](in, state, "knownSpecOptMap")
+      override def apply[F[_]](implicit C: Ops[F]): F[R[T]] = C.maybeInMap[T](in, state, "knownSpecOptMap")
     }
   }
 
   trait BasicDsl { self ⇒
 
     def and[A, B](l: DslElement[R[A]], r: DslElement[R[B]]): DslElement[R[List[Any]]] = new DslElement[R[List[Any]]] {
-      override def apply[F[_]](implicit C: Combinators[F]): F[R[List[Any]]] =
+      override def apply[F[_]](implicit C: Ops[F]): F[R[List[Any]]] =
         C.and[A, B](l.apply[F], r.apply[F])
     }
 
     def or[A, B](l: DslElement[R[A]], r: DslElement[R[B]]): DslElement[R[List[Any]]] = new DslElement[R[List[Any]]] {
-      override def apply[F[_]](implicit C: Combinators[F]): F[R[List[Any]]] =
+      override def apply[F[_]](implicit C: Ops[F]): F[R[List[Any]]] =
         C.or[A, B](l.apply[F], r.apply[F])
     }
 
@@ -99,7 +98,7 @@ object InvariantsDsl {
 
   }
 
-  val ioInterp = new Combinators[cats.effect.IO] {
+  val ioInterp = new Ops[cats.effect.IO] {
 
     override def inSet[T](in: T, state: Set[T], name: String): cats.effect.IO[R[T]] =
       cats.effect.IO {
@@ -182,7 +181,7 @@ object InvariantsDsl {
     }
   }
 
-  val interp = new Combinators[cats.Id] {
+  val interp = new Ops[cats.Id] {
 
     override def inSet[T](in: T, state: Set[T], name: String): Id[R[T]] = {
       if (state.contains(in)) validNel(in)
@@ -330,7 +329,9 @@ object InvariantsDsl {
   find[OrError, Int](List(1, 2, 3, 4, 5), 4)
   find[({ type λ[x] = scala.util.Either[Throwable, x] })#λ, Int](List(1, 2, 3, 4, 5), 4)
 
-  //https://efekahraman.github.io/2018/04/docker-awareness-in-java
+  /*
+  import scalaz._
+  import Scalaz._
   type ZErrorOr[T] = scalaz.ValidationNel[Throwable, T]
   type ErrorOr[T] = cats.data.ValidatedNel[Throwable, T]
   type CatsValidated[T] = cats.data.Validated[Throwable, T]
@@ -341,18 +342,16 @@ object InvariantsDsl {
       scalaz.Validation.fromTryCatchNonFatal[B](out(a)).toValidationNel
     }
   }
+*/
 
-  import scalaz._
-  import Scalaz._
   import cats.data.Validated._
 
   def main(arg: Array[String]): Unit = {
 
-    val a = validateZ(List(1, 2)) { in ⇒
+    /*val a = validateZ(List(1, 2)) { in ⇒
       if (in % 2 == 0) in
       else throw new Exception(s" $in should be even")
-    }
-    //println("a  " + a)
+    }*/
 
     //List[Int] => Validatin[List[Int]]
     val b = cats.Traverse[List].traverse(List(1, 2, 3, 4)) { in ⇒

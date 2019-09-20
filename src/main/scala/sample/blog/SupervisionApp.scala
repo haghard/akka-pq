@@ -45,7 +45,7 @@ class Parent extends Actor with ActorLogging {
 }
 
 class Child extends Actor with ActorLogging {
-  implicit val _ = context.dispatcher
+  implicit val ec = context.dispatcher
 
   def async() = Future {
     Thread.sleep(8000)
@@ -60,14 +60,14 @@ class Child extends Actor with ActorLogging {
   override def preStart(): Unit = {
     println("Child preStart " + self.path + " parent:" + context.parent.path)
     import scala.concurrent.duration._
-    context.system.scheduler.schedule(0.seconds, 3.seconds)(self ! 'Work)
+    context.system.scheduler.schedule(0.seconds, 3.seconds)(self ! Symbol("Work"))
   }
 
   override def receive: Receive = {
     case Failure(ex) ⇒
       println(s"Failure in child:" + ex.getMessage)
       throw ex
-    case 'Work ⇒
+    case Symbol("Work") ⇒
       println("work")
   }
 }

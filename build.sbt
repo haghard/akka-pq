@@ -6,7 +6,7 @@ val akkaVersion = "2.5.25"
 
 name := "akka-pq"
 version := "1.0"
-scalaVersion := "2.12.8"
+scalaVersion := "2.13.0"
 
 val root = project
   .in(file("."))
@@ -20,8 +20,8 @@ val root = project
     scalacOptions in Compile ++= Seq(
       "-deprecation", "-feature", "-unchecked", "-Xlog-reflective-calls",
       "-Xlint",
-      "-language:higherKinds",
-      "-Ypartial-unification" //for cats
+      "-language:higherKinds"
+      //"-Ypartial-unification" //for cats and matryoshka
     ),
 
     // disable parallel tests
@@ -53,32 +53,34 @@ libraryDependencies ++= Seq(
 
   "com.typesafe.akka" %% "akka-stream" % akkaVersion,
 
-  "io.monix" %% "monix" % "3.0.0-RC1",
+  "io.monix" %% "monix" % "3.0.0",
 
   "com.datastax.cassandra" % "cassandra-driver-extras" % "3.7.2",
 
-  //"org.typelevel" %% "cats-effect" % "1.0.0-RC2",
 
   //"com.typesafe.akka" %%  "akka-http"      % akkaHttpVersion,
   //"org.hdrhistogram"  %   "HdrHistogram"      % "2.1.9",
   "com.chuusai" %% "shapeless" % "2.3.3",
+
   "org.typelevel" %% "cats-core" % "2.0.0",
+  "org.typelevel" %% "cats-effect" % "2.0.0",
+
   "com.typesafe.akka" %% "akka-multi-node-testkit" % akkaVersion,
   //"net.cakesolutions" %%  "validated-config"  %  "1.1.2",
   //"com.typesafe.akka" %% "akka-distributed-data" % akkaVersion,
 
   //"com.scalapenos"    %%  "stamina-json"      % "0.1.3",
 
-  "com.slamdata" %% "matryoshka-core" % "0.18.3",
+  //"com.slamdata" %% "matryoshka-core" % "0.21.3",
 
   "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "com.typesafe.scala-logging" %% "scala-logging" % "3.9.0",
+  "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
 
   ("com.lihaoyi" % "ammonite" % "1.6.9" % "test").cross(CrossVersion.full),
 
   "org.iq80.leveldb" % "leveldb" % "0.7" % "test",
   "org.fusesource.leveldbjni" % "leveldbjni-all" % "1.8" % "test",
-  "org.scalatest" %% "scalatest" % "3.0.1" % "test",
+  "org.scalatest" %% "scalatest" % "3.0.8" % "test",
   "commons-io" % "commons-io" % "2.4" % "test")
 
 // ammonite repl

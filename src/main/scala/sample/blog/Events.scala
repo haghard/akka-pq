@@ -46,12 +46,11 @@ object Events {
   //We leverage implicit resolution to do typeclass induction
 
   // Named induction step: (E, Tail)
-  implicit def inductionStep[E, Tail](implicit n: ParsedCmd[E], tailNames: ParsedCmd[Tail]) =
+  implicit def inductionStep[E, Tail](implicit n: ParsedCmd[E], tailNames: ParsedCmd[Tail]): ParsedCmd[(E, Tail)] =
     new ParsedCmd[(E, Tail)] {
       override val name = s"${n.name}, ${tailNames.name}"
     }
 
-  // helper
   def getNamed[E](implicit names: ParsedCmd[E]): String = {
     names.name
   }
@@ -75,7 +74,7 @@ object Events {
 
   // Parser instances for our types.
   implicit val createdFromString = new Parser[OrderCreated] {
-    override def fromString(s: String) = s.split('\t').toList match {
+    override def fromString(s: String): Option[OrderCreated] = s.split('\t').toList match {
       case id :: user :: Nil ⇒
         safeToLong(id).map(id ⇒ OrderCreated(id, user))
       case _ ⇒ None
@@ -91,7 +90,7 @@ object Events {
     }
 
   implicit val playFromString = new Parser[OrderUpdated] {
-    def fromString(s: String) = s.split('\t').toList match {
+    def fromString(s: String): Option[OrderUpdated] = s.split('\t').toList match {
       case id :: user :: trackId :: Nil ⇒
         safeToLong(id).flatMap { id ⇒
           safeToLong(trackId).map { trackId ⇒
@@ -104,7 +103,7 @@ object Events {
   }
 
   implicit val pauseFromString = new Parser[OrderSubmitted] {
-    def fromString(s: String) = s.split('\t').toList match {
+    def fromString(s: String): Option[OrderSubmitted] = s.split('\t').toList match {
       case id :: user :: trackId :: ts :: Nil ⇒
         safeToLong(id).flatMap { id ⇒
           safeToLong(trackId).flatMap { trackId ⇒
@@ -119,7 +118,7 @@ object Events {
   }
 
   // HandleEvents: induction step (E, Tail)
-  implicit def inductionStepHandleEvents[E, Tail](implicit namedEvent: ParsedCmd[E], parser: Parser[E], handler: EventHandler[Tail]) =
+  implicit def inductionStepHandleEvents[E, Tail](implicit namedEvent: ParsedCmd[E], parser: Parser[E], handler: EventHandler[Tail]): EventHandler[(E, Tail)] =
     new EventHandler[(E, Tail)] {
       type Out = Either[handler.Out, E]
 
