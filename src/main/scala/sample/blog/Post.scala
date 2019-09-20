@@ -87,7 +87,7 @@ class Post(author: ActorRef) extends PersistentActor with ActorLogging {
       state.updated(evt)
   }
 
-  override def receiveCommand = initial
+  override def receiveCommand: Receive = initial
 
   def initial: Receive = {
     case GetContent(_) ⇒

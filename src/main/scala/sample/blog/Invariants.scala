@@ -1,7 +1,6 @@
 package sample.blog
 
 import cats.Applicative
-
 import scala.reflect.ClassTag
 
 //runMain sample.blog.Invariants
@@ -17,7 +16,7 @@ object Invariants {
   trait Check[T, State] extends ((T, State) ⇒ Boolean) {
     def name: String
     def errorMessage(in: T, state: State): String
-    def emptyInputMessage = s"Empty input while checking binary logic thing $name"
+    def emptyInputMessage = s"$name. Empty input !"
   }
 
   sealed trait Precondition[F[_]] {
@@ -131,10 +130,10 @@ object Invariants {
   implicit val ac = new HasRoles
   implicit val af = new ContainsKey
 
+  case class ValidatedInput(a: Option[Long], b: Set[Int], c: String, d: Long)
+
   //http://typelevel.org/cats/typeclasses/applicative.html
   def main(args: Array[String]): Unit = {
-    val success = Right(1)
-
     /*def eitherMonad[T]: cats.Monad[({type λ[α] = Either[T, α]})#λ] =
       new cats.Monad[({type λ[α] = Either[T, α]})#λ] {
         def unit[A](a: => A): Either[T, A] = Right(a)
@@ -162,31 +161,25 @@ object Invariants {
 
     println("**************")
 
-    //The whole pipeline stops
+    //The whole pipeline stops if an error occurs
     val out =
       for {
-        a ← Precondition[ExistedId, Option]
-          .input(Some(103L), Set(103L, 4L, 78L, 32L, 8L, 1L))
-          .fold(Left(_), { _ ⇒ success })
+        a ← Precondition.ignorable[ExistedId, Option].input(None /*Some(103L)*/ , Set(103L, 4L, 78L, 32L, 8L, 1L))
 
-        b ← Precondition[HasRoles, cats.Id]
-          .input(Set(1, 9), Set(1, 3, 4, 5, 6, 7, 8))
-          .fold(Left(_), { _ ⇒ success })
+        b ← Precondition[HasRoles, cats.Id].input(Set(1, 8), Set(1, 3, 4, 5, 6, 7, 8))
 
-        c ← Precondition[NameIsUnique, cats.Id]
-          .input("bkl", Set("b", "c", "d", "e"))
-          .fold(Left(_), { _ ⇒ success })
+        c ← Precondition[NameIsUnique, cats.Id].input("a", Set("b", "c", "d", "e"))
 
-        d ← Precondition[ContainsKey, cats.Id]
-          .input(5L, Map(5L -> "b", 6L -> "d", 7L -> "e"))
-          .fold(Left(_), { _ ⇒ success })
+        d ← Precondition[ContainsKey, cats.Id].input(7L, Map(5L -> "b", 6L -> "d", 7L -> "e"))
 
-        e ← Right(78)
+        /*result = product(a, b, c, d) { (a: Option[Long], b: Set[Int], c: String, d: Long) ⇒
+          ValidRes(a, b, c, d)
+        }*/
 
-        result ← product(a, b, c, d, e) { (a: Int, b: Int, c: Int, d: Int, e: Int) ⇒
-          Right(a + b + c + d + e)
-        }
-      } yield result
+      } yield {
+        //(a, b, c, d)
+        product(a, b, c, d)(ValidatedInput)
+      }
 
     println(out)
   }

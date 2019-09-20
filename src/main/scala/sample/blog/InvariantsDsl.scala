@@ -1,23 +1,15 @@
 package sample.blog
 
 import cats.{ Id, Semigroup, Semigroupal }
-import cats.data.NonEmptyList
-import cats.data.Validated
 import cats.data.Validated._
-import cats.syntax.semigroup._
-import cats.syntax.validated._
 import cats.syntax.apply._
 import cats.data._
 import cats.effect.IO
-
-//import scalaz.ValidationNel
 
 // import sample.blog.InvariantsDsl
 object InvariantsDsl {
 
   type R[T] = ValidatedNel[String, T]
-  //type Errors = NonEmptyList[String]
-  //type R[T] = cats.data.Validated[Errors, T]
 
   trait Ops[F[_]] {
     def inSet[T](in: T, state: Set[T], msg: String): F[R[T]]
@@ -353,7 +345,7 @@ object InvariantsDsl {
       else throw new Exception(s" $in should be even")
     }*/
 
-    //List[Int] => Validatin[List[Int]]
+    //List[Int] => Validation[List[Int]]
     val b = cats.Traverse[List].traverse(List(1, 2, 3, 4)) { in ⇒
       cats.data.Validated.catchNonFatal {
         if (in % 2 == 0) in

@@ -209,7 +209,7 @@ object PsJournal {
       l.countDown
     })*/
 
-    l.await(5l, java.util.concurrent.TimeUnit.SECONDS)
+    l.await(5L, java.util.concurrent.TimeUnit.SECONDS)
     println("exit")
     System.exit(0)
   }

@@ -18,8 +18,11 @@ val root = project
 
     //javacOptions in Compile ++= Seq("-Xlint:unchecked", "-Xlint:deprecation"),
     scalacOptions in Compile ++= Seq(
-      "-deprecation", "-feature", "-unchecked", "-Xlog-reflective-calls",
-      "-Xlint",
+      //"-deprecation",
+      //"-feature",
+      //"-unchecked",
+      //"-Xlog-reflective-calls",
+      //"-Xlint",
       "-language:higherKinds"
       //"-Ypartial-unification" //for cats and matryoshka
     ),
