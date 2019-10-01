@@ -5,6 +5,9 @@ import cats.data.Validated._
 import cats.syntax.apply._
 import cats.data._
 import cats.effect.IO
+import sample.blog.tl.ParamConcat
+
+import scala.reflect.ClassTag
 
 // import sample.blog.InvariantsDsl
 object InvariantsDsl {
@@ -22,13 +25,63 @@ object InvariantsDsl {
 
     def maybeInMap[T](in: Option[T], state: Map[T, _], msg: String): F[R[T]]
 
-    def and[A, B](l: F[R[A]], r: F[R[B]]): F[R[List[Any]]] //F[R[(A,B)]]
+    def and[A, B, AB](l: F[R[A]], r: F[R[B]]): F[R[AB]] //F[R[(A,B)]]
 
-    def or[A, B](l: F[R[A]], r: F[R[B]]): F[R[List[Any]]] //F[R[A Either B]]
+    def or[A, B, AB](l: F[R[A]], r: F[R[B]]): F[R[AB]] //F[R[A Either B]]
 
-    protected def toList[T](v: T): List[Any] = v match {
+    /*protected def toList[T](v: T): List[Any] = v match {
       case h :: t ⇒ h :: t
       case e      ⇒ List(e)
+    }*/
+
+    protected def tuple[T](v: T): Product = {
+      def go[T: ClassTag](v: T, acc: Vector[Any] = Vector()): Vector[Any] = {
+        //println(v)
+        v match {
+          case (a, b) ⇒
+            go(a) ++ go(b)
+          case (a, b, c) ⇒
+            go(a) ++ go(b) ++ go(c)
+          case (a, b, c, d) ⇒
+            go(a) ++ go(b) ++ go(c) ++ go(d)
+          case (a, b, c, d, e) ⇒
+            go(a) ++ go(b) ++ go(c) ++ go(d) ++ go(e)
+          case (a, b, c, d, e, f) ⇒
+            go(a) ++ go(b) ++ go(c) ++ go(d) ++ go(e) ++ go(f)
+          case (a, b, c, d, e, f, g) ⇒
+            go(a) ++ go(b) ++ go(c) ++ go(d) ++ go(e) ++ go(f) ++ go(g)
+          case (a, b, c, d, e, f, g, h) ⇒
+            go(a) ++ go(b) ++ go(c) ++ go(d) ++ go(e) ++ go(f) ++ go(g) ++ go(h)
+          case a: T ⇒ acc :+ a
+        }
+      }
+
+      def pack(l: Vector[Any]): Product =
+        l.size match {
+          case 1  ⇒ Tuple1(l(0))
+          case 2  ⇒ Tuple2(l(0), l(1))
+          case 3  ⇒ Tuple3(l(0), l(1), l(2))
+          case 4  ⇒ Tuple4(l(0), l(1), l(2), l(3))
+          case 5  ⇒ Tuple5(l(0), l(1), l(2), l(3), l(4))
+          case 6  ⇒ Tuple6(l(0), l(1), l(2), l(3), l(4), l(5))
+          case 7  ⇒ Tuple7(l(0), l(1), l(2), l(3), l(4), l(5), l(6))
+          case 8  ⇒ Tuple8(l(0), l(1), l(2), l(3), l(4), l(5), l(6), l(7))
+          case 9  ⇒ Tuple9(l(0), l(1), l(2), l(3), l(4), l(5), l(6), l(7), l(8))
+          case 10 ⇒ Tuple10(l(0), l(1), l(2), l(3), l(4), l(5), l(6), l(7), l(8), l(9))
+          case 11 ⇒ Tuple11(l(0), l(1), l(2), l(3), l(4), l(5), l(6), l(7), l(8), l(9), l(10))
+          case 12 ⇒ Tuple12(l(0), l(1), l(2), l(3), l(4), l(5), l(6), l(7), l(8), l(9), l(10), l(11))
+          case 13 ⇒ Tuple13(l(0), l(1), l(2), l(3), l(4), l(5), l(6), l(7), l(8), l(9), l(10), l(11), l(12))
+          case 14 ⇒ Tuple14(l(0), l(1), l(2), l(3), l(4), l(5), l(6), l(7), l(8), l(9), l(10), l(11), l(12), l(13))
+          case 15 ⇒ Tuple15(l(0), l(1), l(2), l(3), l(4), l(5), l(6), l(7), l(8), l(9), l(10), l(11), l(12), l(13), l(14))
+          case 16 ⇒ Tuple16(l(0), l(1), l(2), l(3), l(4), l(5), l(6), l(7), l(8), l(9), l(10), l(11), l(12), l(13), l(14), l(15))
+        }
+
+      pack(
+        v match {
+          case a: Product ⇒ go(a)
+          case value: T   ⇒ Vector(value)
+        }
+      )
     }
   }
 
@@ -72,20 +125,22 @@ object InvariantsDsl {
 
   trait BasicDsl { self ⇒
 
-    def and[A, B](l: DslElement[R[A]], r: DslElement[R[B]]): DslElement[R[List[Any]]] = new DslElement[R[List[Any]]] {
-      override def apply[F[_]](implicit C: Ops[F]): F[R[List[Any]]] =
-        C.and[A, B](l.apply[F], r.apply[F])
+    def and[A, B, AB](l: DslElement[R[A]], r: DslElement[R[B]]): DslElement[R[AB]] = new DslElement[R[AB]] {
+      override def apply[F[_]](implicit C: Ops[F]): F[R[AB]] =
+        C.and[A, B, AB](l.apply[F], r.apply[F])
     }
 
-    def or[A, B](l: DslElement[R[A]], r: DslElement[R[B]]): DslElement[R[List[Any]]] = new DslElement[R[List[Any]]] {
-      override def apply[F[_]](implicit C: Ops[F]): F[R[List[Any]]] =
-        C.or[A, B](l.apply[F], r.apply[F])
+    def or[A, B, AB](l: DslElement[R[A]], r: DslElement[R[B]]): DslElement[R[AB]] = new DslElement[R[AB]] {
+      override def apply[F[_]](implicit C: Ops[F]): F[R[AB]] =
+        C.or[A, B, AB](l.apply[F], r.apply[F])
     }
 
-    implicit class DslOpts[A, B](dslL: DslElement[R[A]]) {
-      def &&(dslR: DslElement[R[B]]): DslElement[R[List[Any]]] = self.and(dslL, dslR)
+    implicit class DslOpts[A, B](dsl: DslElement[R[A]]) {
+      def &&[AB](that: DslElement[R[B]])(implicit ts: ParamConcat.Aux[A, B, AB]): DslElement[R[AB]] =
+        self.and(dsl, that)
 
-      def or(dslR: DslElement[R[B]]): DslElement[R[List[Any]]] = self.or(dslL, dslR)
+      def or[AB](that: DslElement[R[B]])(implicit ts: ParamConcat.Aux[A, B, AB]): DslElement[R[AB]] =
+        self.or(dsl, that)
     }
 
   }
@@ -125,7 +180,7 @@ object InvariantsDsl {
         }
       }
 
-    override def and[A, B](l: IO[R[A]], r: IO[R[B]]): IO[R[List[Any]]] = {
+    override def and[A, B, AB](l: IO[R[A]], r: IO[R[B]]): IO[R[AB]] = {
       for {
         a ← l
         b ← r
@@ -134,8 +189,10 @@ object InvariantsDsl {
           case Valid(left) ⇒
             b match {
               case Valid(right) ⇒
-                Valid(toList[A](left) ::: toList[B](right))
-              case Invalid(invR) ⇒ Invalid(invR)
+                //Valid(toList[A](left) ::: toList[B](right))
+                Valid(tuple((tuple(left), tuple(right))).asInstanceOf[AB])
+              case Invalid(invR) ⇒
+                Invalid(invR)
             }
           case Invalid(left) ⇒
             b match {
@@ -148,7 +205,7 @@ object InvariantsDsl {
       }
     }
 
-    override def or[A, B](l: IO[R[A]], r: IO[R[B]]): IO[R[List[Any]]] = {
+    override def or[A, B, AB](l: IO[R[A]], r: IO[R[B]]): IO[R[AB]] = {
       for {
         a ← l
         b ← r
@@ -157,14 +214,17 @@ object InvariantsDsl {
           case Valid(left) ⇒
             b match {
               case Valid(right) ⇒
-                Valid(toList[A](left) ::: toList[B](right))
+                //Valid(toList[A](left) ::: toList[B](right))
+                Valid(tuple((tuple(left), tuple(right))).asInstanceOf[AB])
               case Invalid(invR) ⇒
-                Valid(toList[A](left))
+                //Valid(toList[A](left))
+                Valid(tuple(left).asInstanceOf[AB])
             }
           case Invalid(left) ⇒
             b match {
               case Valid(right) ⇒
-                Valid(toList[B](right))
+                //Valid(toList[B](right))
+                Valid(tuple(right).asInstanceOf[AB])
               case Invalid(invR) ⇒
                 Invalid(left ::: invR)
             }
@@ -174,44 +234,34 @@ object InvariantsDsl {
   }
 
   val interp = new Ops[cats.Id] {
+    override def inSet[T](in: T, state: Set[T], name: String): Id[R[T]] =
+      if (state.contains(in)) validNel(in) else invalidNel(s"$name failed")
 
-    override def inSet[T](in: T, state: Set[T], name: String): Id[R[T]] = {
-      if (state.contains(in)) validNel(in)
-      else invalidNel(s"$name failed")
-    }
+    override def notInSet[T](in: T, state: Set[T], name: String): Id[R[T]] =
+      if (!state.contains(in)) validNel(in) else invalidNel(s"$name failed")
 
-    override def notInSet[T](in: T, state: Set[T], name: String): Id[R[T]] = {
-      if (!state.contains(in)) validNel(in)
-      else invalidNel(s"$name failed")
-    }
-
-    override def inMap[T](in: T, state: Map[T, _], name: String): Id[R[T]] = {
+    override def inMap[T](in: T, state: Map[T, _], name: String): Id[R[T]] =
       state.get(in).fold[R[T]](invalidNel(s"$name failed")) { _ ⇒ validNel(in) }
-    }
 
-    override def maybeInMap[T](in: Option[T], state: Map[T, _], name: String): Id[R[T]] = {
+    override def maybeInMap[T](in: Option[T], state: Map[T, _], name: String): Id[R[T]] =
       in.fold[R[T]](validNel(in.asInstanceOf[T]))(inMap(_, state, name))
-    }
 
-    override def maybeInSet[T](in: Option[T], state: Set[T], name: String): R[T] = {
+    override def maybeInSet[T](in: Option[T], state: Set[T], name: String): R[T] =
       in.fold[R[T]](validNel(in.asInstanceOf[T]))(inSet(_, state, name))
-    }
 
-    //HList
-    override def and[A, B](l: Id[R[A]], r: Id[R[B]]): /*Id[R[(A, B)]]*/ Id[R[List[Any]]] = {
+    override def and[A, B, AB](l: Id[R[A]], r: Id[R[B]]): Id[R[AB]] = {
       //Semigroupal.map2(l,r)((a, b) ⇒ (a, b))
+      //import cats.implicits._ cats.Traverse[List].sequence(List(a, b))
       val (a, b) = (l, r).mapN { (a, b) ⇒ (a, b) }
       println(s"DEBUG: $a and $b")
-
-      /*import cats.implicits._
-      cats.Traverse[List].sequence(List(a, b))*/
-
       l match {
         case Valid(left) ⇒
           r match {
             case Valid(right) ⇒
-              Valid(toList[A](left) ::: toList[B](right))
-            case Invalid(invR) ⇒ Invalid(invR)
+              //Valid(toList[A](left) ::: toList[B](right))
+              Valid(tuple((tuple(left), tuple(right))).asInstanceOf[AB])
+            case Invalid(invR) ⇒
+              Invalid(invR)
           }
         case Invalid(left) ⇒
           r match {
@@ -223,22 +273,24 @@ object InvariantsDsl {
       }
     }
 
-    override def or[A, B](l: Id[R[A]], r: Id[R[B]]): Id[R[List[Any]]] = {
+    override def or[A, B, AB](l: Id[R[A]], r: Id[R[B]]): Id[R[AB]] = {
       val (a, b) = (l, r).mapN { (a, b) ⇒ (a, b) }
       println(s"DEBUG: $a or $b")
-
       l match {
         case Valid(left) ⇒
           r match {
             case Valid(right) ⇒
-              Valid(toList[A](left) ::: toList[B](right))
+              //Valid(toList[A](left) ::: toList[B](right))
+              Valid(tuple((tuple(left), tuple(right))).asInstanceOf[AB])
             case Invalid(invR) ⇒
-              Valid(toList[A](left))
+              //Valid(toList[A](left))
+              Valid(tuple(left).asInstanceOf[AB])
           }
         case Invalid(left) ⇒
           r match {
             case Valid(right) ⇒
-              Valid(toList[B](right))
+              //Valid(toList[B](right))
+              Valid(tuple(right).asInstanceOf[AB])
             case Invalid(invR) ⇒
               Invalid(left ::: invR)
           }
@@ -255,13 +307,13 @@ object InvariantsDsl {
 
   uniqueProd("a1", Set("a", "b", "c")) && uniqueSpec(2L, Set(3L, 4L)) //&& knownSpec(2L, Set(2L, 3L, 4L)) && knownSpec(2L, Set(2L, 3L, 4L))
 
-  //val expAnd = uniqueProd("a1", Set("a", "b", "c")) && uniqueSpec(1L, Set(2L, 3L, 4L, 5L, 6L, 7L)) or knownSpec(4L, Map(2L -> "a", 3L -> "b"))
+  val expAnd = uniqueProd("a1", Set("a", "b", "c")) && uniqueSpec(1L, Set(2L, 3L, 4L, 5L, 6L, 7L)) && knownSpec(4L, Map(2L -> "a", 3L -> "b"))
   //expAnd(interp)
 
   knownSpec(Some(8L), Map(2L -> "a", 18L -> "b"))(interp)
   knownProductOpt(Some(1), Map(1 -> "prod_a", 18 -> "prod_b"))(interp)
 
-  //val expOr = uniqueProd("a", Set("a", "b", "c")) or knownSpec(8L, Map(2L -> "a", 3L -> "b"))
+  val expOr = uniqueProd("a", Set("a", "b", "c")) or knownSpec(8L, Map(2L -> "a", 3L -> "b"))
   //expOr(interp)
 
   //https://typelevel.org/cats-effect/datatypes/io.html
