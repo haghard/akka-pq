@@ -12,27 +12,30 @@ import scala.reflect.ClassTag
 // import sample.blog.InvariantsDsl
 object InvariantsDsl {
 
-  type R[T] = ValidatedNel[String, T]
+  type ErrOrR[T] = ValidatedNel[String, T]
 
   trait Ops[F[_]] {
-    def inSet[T](in: T, state: Set[T], msg: String): F[R[T]]
+    def inSet[T](in: T, state: Set[T], msg: String): F[ErrOrR[T]]
 
-    def notInSet[T](in: T, state: Set[T], msg: String): F[R[T]]
+    def notInSet[T](in: T, state: Set[T], msg: String): F[ErrOrR[T]]
 
-    def maybeInSet[T](in: Option[T], state: Set[T], msg: String): F[R[T]]
+    def maybeInSet[T](in: Option[T], state: Set[T], msg: String): F[ErrOrR[T]]
 
-    def inMap[T](in: T, state: Map[T, _], msg: String): F[R[T]]
+    def inMap[T](in: T, state: Map[T, _], msg: String): F[ErrOrR[T]]
 
-    def maybeInMap[T](in: Option[T], state: Map[T, _], msg: String): F[R[T]]
+    def maybeInMap[T](in: Option[T], state: Map[T, _], msg: String): F[ErrOrR[T]]
 
-    def and[A, B, AB](l: F[R[A]], r: F[R[B]]): F[R[AB]] //F[R[(A,B)]]
+    def and[A, B, AB](l: F[ErrOrR[A]], r: F[ErrOrR[B]]): F[ErrOrR[AB]] //F[R[(A,B)]]
 
-    def or[A, B, AB](l: F[R[A]], r: F[R[B]]): F[R[AB]] //F[R[A Either B]]
+    def or[A, B, AB](l: F[ErrOrR[A]], r: F[ErrOrR[B]]): F[ErrOrR[AB]] //F[R[A Either B]]
 
-    /*protected def toList[T](v: T): List[Any] = v match {
+    protected def toList[T](v: T): List[Any] = v match {
       case h :: t ⇒ h :: t
       case e      ⇒ List(e)
-    }*/
+    }
+
+    private def get[T: ClassTag](list: List[Any]): List[T] =
+      list.collect { case a: T ⇒ a }
 
     protected def tuple[T](v: T): Product = {
       def go[T: ClassTag](v: T, acc: Vector[Any] = Vector()): Vector[Any] = {
@@ -52,7 +55,8 @@ object InvariantsDsl {
             go(a) ++ go(b) ++ go(c) ++ go(d) ++ go(e) ++ go(f) ++ go(g)
           case (a, b, c, d, e, f, g, h) ⇒
             go(a) ++ go(b) ++ go(c) ++ go(d) ++ go(e) ++ go(f) ++ go(g) ++ go(h)
-          case a: T ⇒ acc :+ a
+          case Tuple1(a) ⇒ acc :+ a
+          case v: T      ⇒ acc :+ v
         }
       }
 
@@ -79,7 +83,7 @@ object InvariantsDsl {
       pack(
         v match {
           case a: Product ⇒ go(a)
-          case value: T   ⇒ Vector(value)
+          case value      ⇒ Vector(value)
         }
       )
     }
@@ -91,55 +95,55 @@ object InvariantsDsl {
 
   trait CheckProdDsl {
 
-    def uniqueProd[T](in: T, state: Set[T]): DslElement[R[T]] = new DslElement[R[T]] {
-      override def apply[F[_]](implicit C: Ops[F]): F[R[T]] = C.notInSet[T](in, state, "uniqueProductName")
+    def uniqueProd[T](in: T, state: Set[T]): DslElement[ErrOrR[T]] = new DslElement[ErrOrR[T]] {
+      override def apply[F[_]](implicit C: Ops[F]): F[ErrOrR[T]] = C.notInSet[T](in, state, "uniqueProductName")
     }
 
-    def knownProductName[T](in: T, state: Set[T]): DslElement[R[T]] = new DslElement[R[T]] {
-      override def apply[F[_]](implicit C: Ops[F]): F[R[T]] = C.notInSet[T](in, state, "knownProductName")
+    def knownProductName[T](in: T, state: Set[T]): DslElement[ErrOrR[T]] = new DslElement[ErrOrR[T]] {
+      override def apply[F[_]](implicit C: Ops[F]): F[ErrOrR[T]] = C.notInSet[T](in, state, "knownProductName")
     }
 
-    def knownProductOpt[T](in: Option[T], state: Map[T, _]): DslElement[R[T]] = new DslElement[R[T]] {
-      override def apply[F[_]](implicit C: Ops[F]): F[R[T]] = C.maybeInMap[T](in, state, "knownProductOpt")
+    def knownProductOpt[T](in: Option[T], state: Map[T, _]): DslElement[ErrOrR[T]] = new DslElement[ErrOrR[T]] {
+      override def apply[F[_]](implicit C: Ops[F]): F[ErrOrR[T]] = C.maybeInMap[T](in, state, "knownProductOpt")
     }
   }
 
   trait CheckSpecDsl {
 
-    def knownSpec[T](in: T, state: Set[T]): DslElement[R[T]] = new DslElement[R[T]] {
-      override def apply[F[_]](implicit C: Ops[F]): F[R[T]] = C.inSet[T](in, state, "knownSpecSet")
+    def knownSpec[T](in: T, state: Set[T]): DslElement[ErrOrR[T]] = new DslElement[ErrOrR[T]] {
+      override def apply[F[_]](implicit C: Ops[F]): F[ErrOrR[T]] = C.inSet[T](in, state, "knownSpecSet")
     }
 
-    def uniqueSpec[T](in: T, state: Set[T]): DslElement[R[T]] = new DslElement[R[T]] {
-      override def apply[F[_]](implicit C: Ops[F]): F[R[T]] = C.notInSet[T](in, state, "uniqueSpec")
+    def uniqueSpec[T](in: T, state: Set[T]): DslElement[ErrOrR[T]] = new DslElement[ErrOrR[T]] {
+      override def apply[F[_]](implicit C: Ops[F]): F[ErrOrR[T]] = C.notInSet[T](in, state, "uniqueSpec")
     }
 
-    def knownSpec[T](in: T, state: Map[T, _]): DslElement[R[T]] = new DslElement[R[T]] {
-      override def apply[F[_]](implicit C: Ops[F]): F[R[T]] = C.inMap[T](in, state, "knownSpecMap")
+    def knownSpec[T](in: T, state: Map[T, _]): DslElement[ErrOrR[T]] = new DslElement[ErrOrR[T]] {
+      override def apply[F[_]](implicit C: Ops[F]): F[ErrOrR[T]] = C.inMap[T](in, state, "knownSpecMap")
     }
 
-    def knownSpec[T](in: Option[T], state: Map[T, _]): DslElement[R[T]] = new DslElement[R[T]] {
-      override def apply[F[_]](implicit C: Ops[F]): F[R[T]] = C.maybeInMap[T](in, state, "knownSpecOptMap")
+    def knownSpec[T](in: Option[T], state: Map[T, _]): DslElement[ErrOrR[T]] = new DslElement[ErrOrR[T]] {
+      override def apply[F[_]](implicit C: Ops[F]): F[ErrOrR[T]] = C.maybeInMap[T](in, state, "knownSpecOptMap")
     }
   }
 
   trait BasicDsl { self ⇒
 
-    def and[A, B, AB](l: DslElement[R[A]], r: DslElement[R[B]]): DslElement[R[AB]] = new DslElement[R[AB]] {
-      override def apply[F[_]](implicit C: Ops[F]): F[R[AB]] =
-        C.and[A, B, AB](l.apply[F], r.apply[F])
+    def and[A, B, T](l: DslElement[ErrOrR[A]], r: DslElement[ErrOrR[B]]): DslElement[ErrOrR[T]] = new DslElement[ErrOrR[T]] {
+      override def apply[F[_]](implicit C: Ops[F]): F[ErrOrR[T]] =
+        C.and[A, B, T](l.apply[F], r.apply[F])
     }
 
-    def or[A, B, AB](l: DslElement[R[A]], r: DslElement[R[B]]): DslElement[R[AB]] = new DslElement[R[AB]] {
-      override def apply[F[_]](implicit C: Ops[F]): F[R[AB]] =
-        C.or[A, B, AB](l.apply[F], r.apply[F])
+    def or[A, B, T](l: DslElement[ErrOrR[A]], r: DslElement[ErrOrR[B]]): DslElement[ErrOrR[T]] = new DslElement[ErrOrR[T]] {
+      override def apply[F[_]](implicit C: Ops[F]): F[ErrOrR[T]] =
+        C.or[A, B, T](l.apply[F], r.apply[F])
     }
 
-    implicit class DslOpts[A, B](dsl: DslElement[R[A]]) {
-      def &&[AB](that: DslElement[R[B]])(implicit ts: ParamConcat.Aux[A, B, AB]): DslElement[R[AB]] =
+    implicit class DslOpts[A, B](dsl: DslElement[ErrOrR[A]]) {
+      def &&[T](that: DslElement[ErrOrR[B]])(implicit ts: ParamConcat.Aux[A, B, T]): DslElement[ErrOrR[T]] =
         self.and(dsl, that)
 
-      def or[AB](that: DslElement[R[B]])(implicit ts: ParamConcat.Aux[A, B, AB]): DslElement[R[AB]] =
+      def or[T](that: DslElement[ErrOrR[B]])(implicit ts: ParamConcat.Aux[A, B, T]): DslElement[ErrOrR[T]] =
         self.or(dsl, that)
     }
 
@@ -147,40 +151,40 @@ object InvariantsDsl {
 
   val ioInterp = new Ops[cats.effect.IO] {
 
-    override def inSet[T](in: T, state: Set[T], name: String): cats.effect.IO[R[T]] =
+    override def inSet[T](in: T, state: Set[T], name: String): cats.effect.IO[ErrOrR[T]] =
       cats.effect.IO {
         if (state.contains(in)) validNel(in)
         else invalidNel(s"$name failed")
       }
 
-    override def notInSet[T](in: T, state: Set[T], name: String): IO[R[T]] =
+    override def notInSet[T](in: T, state: Set[T], name: String): IO[ErrOrR[T]] =
       cats.effect.IO {
         if (!state.contains(in)) validNel(in)
         else invalidNel(s"$name failed")
       }
 
-    override def inMap[T](in: T, state: Map[T, _], name: String): IO[R[T]] =
+    override def inMap[T](in: T, state: Map[T, _], name: String): IO[ErrOrR[T]] =
       IO {
-        state.get(in).fold[R[T]](invalidNel(s"$name failed")) { _ ⇒ validNel(in) }
+        state.get(in).fold[ErrOrR[T]](invalidNel(s"$name failed")) { _ ⇒ validNel(in) }
       }
 
-    override def maybeInSet[T](in: Option[T], state: Set[T], name: String): IO[R[T]] =
+    override def maybeInSet[T](in: Option[T], state: Set[T], name: String): IO[ErrOrR[T]] =
       IO {
-        in.fold[R[T]](validNel(in.asInstanceOf[T])) { el ⇒
+        in.fold[ErrOrR[T]](validNel(in.asInstanceOf[T])) { el ⇒
           if (state.contains(el)) validNel(el)
           else invalidNel(s"$name failed")
         }
       }
 
-    override def maybeInMap[T](in: Option[T], state: Map[T, _], name: String): IO[R[T]] =
+    override def maybeInMap[T](in: Option[T], state: Map[T, _], name: String): IO[ErrOrR[T]] =
       IO {
-        in.fold[R[T]](validNel(in.asInstanceOf[T])) { el ⇒
+        in.fold[ErrOrR[T]](validNel(in.asInstanceOf[T])) { el ⇒
           if (state.get(el).isDefined) validNel(el)
           else invalidNel(s"$name failed")
         }
       }
 
-    override def and[A, B, AB](l: IO[R[A]], r: IO[R[B]]): IO[R[AB]] = {
+    override def and[A, B, AB](l: IO[ErrOrR[A]], r: IO[ErrOrR[B]]): IO[ErrOrR[AB]] = {
       for {
         a ← l
         b ← r
@@ -205,7 +209,7 @@ object InvariantsDsl {
       }
     }
 
-    override def or[A, B, AB](l: IO[R[A]], r: IO[R[B]]): IO[R[AB]] = {
+    override def or[A, B, AB](l: IO[ErrOrR[A]], r: IO[ErrOrR[B]]): IO[ErrOrR[AB]] = {
       for {
         a ← l
         b ← r
@@ -234,22 +238,22 @@ object InvariantsDsl {
   }
 
   val interp = new Ops[cats.Id] {
-    override def inSet[T](in: T, state: Set[T], name: String): Id[R[T]] =
+    override def inSet[T](in: T, state: Set[T], name: String): Id[ErrOrR[T]] =
       if (state.contains(in)) validNel(in) else invalidNel(s"$name failed")
 
-    override def notInSet[T](in: T, state: Set[T], name: String): Id[R[T]] =
+    override def notInSet[T](in: T, state: Set[T], name: String): Id[ErrOrR[T]] =
       if (!state.contains(in)) validNel(in) else invalidNel(s"$name failed")
 
-    override def inMap[T](in: T, state: Map[T, _], name: String): Id[R[T]] =
-      state.get(in).fold[R[T]](invalidNel(s"$name failed")) { _ ⇒ validNel(in) }
+    override def inMap[T](in: T, state: Map[T, _], name: String): Id[ErrOrR[T]] =
+      state.get(in).fold[ErrOrR[T]](invalidNel(s"$name failed")) { _ ⇒ validNel(in) }
 
-    override def maybeInMap[T](in: Option[T], state: Map[T, _], name: String): Id[R[T]] =
-      in.fold[R[T]](validNel(in.asInstanceOf[T]))(inMap(_, state, name))
+    override def maybeInMap[T](in: Option[T], state: Map[T, _], name: String): Id[ErrOrR[T]] =
+      in.fold[ErrOrR[T]](validNel(in.asInstanceOf[T]))(inMap(_, state, name))
 
-    override def maybeInSet[T](in: Option[T], state: Set[T], name: String): R[T] =
-      in.fold[R[T]](validNel(in.asInstanceOf[T]))(inSet(_, state, name))
+    override def maybeInSet[T](in: Option[T], state: Set[T], name: String): ErrOrR[T] =
+      in.fold[ErrOrR[T]](validNel(in.asInstanceOf[T]))(inSet(_, state, name))
 
-    override def and[A, B, AB](l: Id[R[A]], r: Id[R[B]]): Id[R[AB]] = {
+    override def and[A, B, AB](l: Id[ErrOrR[A]], r: Id[ErrOrR[B]]): Id[ErrOrR[AB]] = {
       //Semigroupal.map2(l,r)((a, b) ⇒ (a, b))
       //import cats.implicits._ cats.Traverse[List].sequence(List(a, b))
       val (a, b) = (l, r).mapN { (a, b) ⇒ (a, b) }
@@ -273,9 +277,13 @@ object InvariantsDsl {
       }
     }
 
-    override def or[A, B, AB](l: Id[R[A]], r: Id[R[B]]): Id[R[AB]] = {
+    override def or[A, B, AB](l: Id[ErrOrR[A]], r: Id[ErrOrR[B]]): Id[ErrOrR[AB]] = {
       val (a, b) = (l, r).mapN { (a, b) ⇒ (a, b) }
       println(s"DEBUG: $a or $b")
+      import shapeless.Coproduct._
+      //type Or = shapeless.:+:[A, shapeless.:+:[B, shapeless.CNil]]
+      //shapeless.Coproduct[Or](null.asInstanceOf[A])
+
       l match {
         case Valid(left) ⇒
           r match {
@@ -307,14 +315,18 @@ object InvariantsDsl {
 
   uniqueProd("a1", Set("a", "b", "c")) && uniqueSpec(2L, Set(3L, 4L)) //&& knownSpec(2L, Set(2L, 3L, 4L)) && knownSpec(2L, Set(2L, 3L, 4L))
 
-  val expAnd = uniqueProd("a1", Set("a", "b", "c")) && uniqueSpec(1L, Set(2L, 3L, 4L, 5L, 6L, 7L)) && knownSpec(4L, Map(2L -> "a", 3L -> "b"))
+  val expAnd = uniqueProd("a1", Set("a", "b", "c")) && uniqueSpec(1L, Set(2L, 3L, 4L, 5L, 6L, 7L)) or knownSpec(4L, Map(2L -> "a", 3L -> "b"))
   //expAnd(interp)
 
   knownSpec(Some(8L), Map(2L -> "a", 18L -> "b"))(interp)
   knownProductOpt(Some(1), Map(1 -> "prod_a", 18 -> "prod_b"))(interp)
 
-  val expOr = uniqueProd("a", Set("a", "b", "c")) or knownSpec(8L, Map(2L -> "a", 3L -> "b"))
-  //expOr(interp)
+  val expOr = uniqueProd("e", Set("a", "b", "c")) or knownSpec(8L, Map(2L -> "a", 3L -> "b"))
+  /*expOr(interp) match {
+    case Invalid(_) ⇒ println("error")
+    case Valid(r)   ⇒ println("ok: " + r)
+  }*/
+  //.fold(_=> println("error"), { case (a,b) => println(s"res: $a:$b") })
 
   //https://typelevel.org/cats-effect/datatypes/io.html
 
@@ -435,7 +447,11 @@ object InvariantsDsl {
       uniqueSpec(1, Set(2, 3, 4, 6))
     )
 
-    val expOr = (uniqueProd("b", Set("b", "c")) or knownSpec(Some(21L), Map(21L -> "a", 3L -> "b"))) && uniqueSpec(1, Set(2, 3, 4, 6))
+    //val expOr = (uniqueProd("b", Set("b", "c")) or knownSpec(Some(21L), Map(21L -> "a", 3L -> "b"))) && uniqueSpec(1, Set(2, 3, 4, 6))
+
+    val expOr = (uniqueProd("b", Set("b", "c")) or knownSpec(Some(21L), Map(21L -> "a", 3L -> "b")))
+      .&&(uniqueSpec(1, Set(2, 3, 4, 6)) or uniqueSpec(3, Set(2, 3, 4, 6)))
+
     println("> " + expOr(interp))
   }
 
