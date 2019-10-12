@@ -69,7 +69,7 @@ object InvariantsDsl2 {
 
   }
 
-  val interp = new Ops[cats.Id] {
+  val interp = new Ops[Id] {
 
     override def inSet[T](in: T, state: Set[T], name: String): Id[R] =
       if (state.contains(in)) None else Some(List(s"$name failed"))
@@ -121,5 +121,5 @@ object InvariantsDsl2 {
 
   //returns None if in case of success otherwise Some(errors)
   val expAnd = (uniqueSpec(1, Set(2, 3, 4, 6)) && knownSpec(21L, Set(21L, 3L))).or(uniqueProd("b", Set("b", "c")))
-  expAnd.apply(interp)
+  expAnd(interp)
 }

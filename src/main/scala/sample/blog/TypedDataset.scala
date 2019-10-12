@@ -8,7 +8,7 @@ object TypedDataset {
   trait Column[T] {
     self: T ⇒
     def name: String
-    def check(row: Row): Boolean = !row.isNull(name)
+    def nonEmpty(row: Row): Boolean = !row.isNull(name)
   }
 
   sealed trait Id extends Column[Id]
@@ -35,7 +35,7 @@ object TypedDataset {
   case class TypedRow[T](row: Row) {
 
     def project[A <: Column[A]](c: Column[A]): TypedRow[T with A] = {
-      assert(c.check(row))
+      assert(c.nonEmpty(row))
       copy[T with A](row)
     }
 
