@@ -119,7 +119,7 @@ object InvariantsDsl2 {
 
   uniqueProd("a", Set("a", "b", "c")) && uniqueSpec(1L, Set(2L, 3L, 4L, 5L, 6L, 7L)) or knownSpec(4L, Set(2L, 3L))
 
-  //returns None if in case of success otherwise Some(errors)
+  //returns None in case of success otherwise Some(errors)
   val expAnd = (uniqueSpec(1, Set(2, 3, 4, 6)) && knownSpec(21L, Set(21L, 3L))).or(uniqueProd("b", Set("b", "c")))
   expAnd(interp)
 }
