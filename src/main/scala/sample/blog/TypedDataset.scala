@@ -7,7 +7,7 @@ object TypedDataset {
 
   //Schema type
 
-  trait Column[T <: Column[T]] { self: T ⇒
+  trait Column[-T <: Column[T]] { //self: T ⇒
     def name: String
     def nonEmpty(row: Row): Boolean = !row.isNull(name)
   }
@@ -33,17 +33,19 @@ object TypedDataset {
     override val name = "score_d"
   }
 
-
   object TypedRow {
     def id(row: Row): TypedRow[Id] = TypedRow[Id](rawRow)
   }
 
   final case class TypedRow[S](row: Row) {
     def |@|[T <: Column[T]](c: Column[T]): TypedRow[S with T] =
-      project(c)
+      project[T](c)
 
     def |+|[T <: Column[T]](c: Column[T]): TypedRow[S with T] =
-      project(c)
+      project[T](c)
+
+    def ~>[T <: Column[T]](c: Column[T]): TypedRow[S with T] =
+      project[T](c)
 
     /**
      * Checks in runtime that the give column is there. Tracks types in compile time.
@@ -62,8 +64,8 @@ object TypedDataset {
   def transformation1[T <: Id with Name with Score](ds: TypedRow[T]): TypedRow[T] = ???
 
   val rawRow: Row = ???
-  val data = TypedRow.id(rawRow) |@| Name |@| ScoreD
-  val data0 = TypedRow.id(rawRow) |+| Name |+| ScoreD
+  val data = TypedRow.id(rawRow) project Name project ScoreD
+  val data0 = TypedRow.id(rawRow) project Name project ScoreD
 
   transformation0(data)
 

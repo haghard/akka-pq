@@ -365,6 +365,23 @@ object InvariantsDsl {
       }
   }
 
+  sealed trait Op { self ⇒
+    def +(other: Op): Op = Both(self, other)
+  }
+  final case class Both(a: Op, b: Op) extends Op
+  final case class Cmd(input: String) extends Op
+
+  val cmds = Cmd("hello") + Cmd("word") + Cmd("!!!")
+  run(cmds)
+
+  def run(op: Op): Unit = op match {
+    case Both(a, b) ⇒
+      run(a)
+      run(b)
+    case in: Cmd ⇒
+      println(s"... $in")
+  }
+
   //doWhile(List.range(1, 10), 6)
   //doWhile(Option(1), 3)
 

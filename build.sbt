@@ -2,11 +2,11 @@ import com.typesafe.sbt.SbtMultiJvm.MultiJvmKeys.MultiJvm
 import com.typesafe.sbt.SbtMultiJvm.multiJvmSettings
 import scalariform.formatter.preferences._
 
-val akkaVersion = "2.5.25"
+val akkaVersion = "2.5.26"
 
 name := "akka-pq"
 version := "1.0"
-scalaVersion := "2.13.0"
+scalaVersion := "2.13.1"
 
 val root = project
   .in(file("."))
@@ -48,13 +48,14 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-cluster" % akkaVersion,
   "com.typesafe.akka" %% "akka-cluster-tools" % akkaVersion,
   "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
-  "com.typesafe.akka" %% "akka-persistence-cassandra" % "0.99",
+  "com.typesafe.akka" %% "akka-persistence-cassandra" % "0.102",
   "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
   "ch.qos.logback" % "logback-classic" % "1.2.3",
 
   //"com.typesafe.akka" %%  "akka-persistence-query" % "0.59",
 
   "com.typesafe.akka" %% "akka-stream" % akkaVersion,
+
 
   "io.monix" %% "monix" % "3.0.0",
 
@@ -65,8 +66,8 @@ libraryDependencies ++= Seq(
   //"org.hdrhistogram"  %   "HdrHistogram"      % "2.1.9",
   "com.chuusai" %% "shapeless" % "2.3.3",
 
-  "org.typelevel" %% "cats-core" % "2.0.0",
-  "org.typelevel" %% "cats-effect" % "2.0.0",
+  "org.typelevel" %% "cats-core" % "2.1.0",
+  "org.typelevel" %% "cats-effect" % "2.1.0",
 
   "com.typesafe.akka" %% "akka-multi-node-testkit" % akkaVersion,
   //"net.cakesolutions" %%  "validated-config"  %  "1.1.2",
@@ -79,7 +80,7 @@ libraryDependencies ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
 
-  ("com.lihaoyi" % "ammonite" % "1.7.1" % "test").cross(CrossVersion.full),
+  ("com.lihaoyi" % "ammonite" % "1.9.2" % "test").cross(CrossVersion.full),
 
   "org.iq80.leveldb" % "leveldb" % "0.7" % "test",
   "org.fusesource.leveldbjni" % "leveldbjni-all" % "1.8" % "test",
