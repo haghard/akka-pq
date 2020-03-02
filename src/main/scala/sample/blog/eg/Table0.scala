@@ -38,19 +38,19 @@ object Table0 {
 
   case class GameTableState(userChips: Map[Long, Int] = Map.empty)
 
-  //case class Persisted(cmdId: Long)
+  object Persisted
 
   def props = Props(new Table0())
 }
 
 //Invariant: Number of chips per player should not exceed 100
-class Table0(waterMark: Int = 1 << 3, chipsLimitPerPlayer: Int = 1000) extends Timers with PersistentActor with ActorLogging {
+class Table0(waterMark: Int = 20, chipsLimitPerPlayer: Int = 1000) extends Timers with PersistentActor with ActorLogging {
 
   override val persistenceId = "gt-0" //self.path.name
 
   timers.startPeriodicTimer(persistenceId, Flush, 2000.millis)
 
-  override def receiveCommand = active(SortedMap[Long, GameTableEvent](), GameTableState(), None)
+  override def receiveCommand = active(SortedMap[Long, GameTableEvent](), GameTableState(), None, 0)
 
   override def receiveRecover: Receive = {
     var map = Map[Long, Int]()
@@ -62,7 +62,7 @@ class Table0(waterMark: Int = 1 << 3, chipsLimitPerPlayer: Int = 1000) extends T
       case akka.persistence.RecoveryCompleted ⇒
         val s = GameTableState(map)
         log.info("RecoveryCompleted {}", s)
-        context.become(active(SortedMap[Long, GameTableEvent](), s, None))
+        context.become(active(SortedMap[Long, GameTableEvent](), s, None, 0))
     }
   }
 
@@ -78,36 +78,44 @@ class Table0(waterMark: Int = 1 << 3, chipsLimitPerPlayer: Int = 1000) extends T
         state
     }
 
-  def active(outstandingEvents: SortedMap[Long, GameTableEvent], optimisticState: GameTableState, upstream: Option[ActorRef]): Receive = {
+  def active(outstandingEvents: SortedMap[Long, GameTableEvent], optimisticState: GameTableState, upstream: Option[ActorRef], bSize: Int): Receive = {
     case cmd: PlaceBet ⇒
       //validation should be here!!
-      log.info("in {}", cmd.cmdId)
+      //log.info("in {}", cmd.cmdId)
       val ev = BetPlaced(cmd.cmdId, cmd.playerId, cmd.chips)
       //optimistically update state before persisting events
       val updatedState = update(ev, optimisticState)
       val outstandingEventsUpdt = outstandingEvents + (ev.cmdId -> ev)
 
       if (outstandingEventsUpdt.keySet.size < waterMark) {
-        context become active(outstandingEventsUpdt, updatedState, Some(sender()))
+        context become active(outstandingEventsUpdt, updatedState, Some(sender()), bSize)
       } else {
+        //We hope that by the time we fill up current batch the prev one has already been persisted.
         upstream.foreach(_ ! BackOff)
-        self ! Flush
-        log.warning("buffer size: {}. Last cmd id:{}", outstandingEventsUpdt.keySet.size, cmd.cmdId)
-        context become active(outstandingEventsUpdt, updatedState, upstream)
+        log.warning("BackOff - buffer size: {}: outstanding pers:{}. Last cmd id:{}", outstandingEventsUpdt.keySet.size, bSize, cmd.cmdId)
+
+        if (bSize == 0) {
+          self ! Flush
+        }
+
+        context become active(outstandingEventsUpdt, updatedState, upstream, bSize)
       }
     case Flush if outstandingEvents.nonEmpty ⇒
+      val bSize = outstandingEvents.keySet.size
       log.info("persist batch [{}]", outstandingEvents.keySet.mkString(","))
       persistAllAsync(outstandingEvents.values.toSeq) { e ⇒
         e match {
           //calls for each persisted event
           case e: BetPlaced ⇒
+            Thread.sleep(21)
             //TODO: send to self and remove from buffer
             upstream.foreach(_ ! BetPlacedReply(e.cmdId, e.playerId))
-            //self ! Persisted(e.cmdId)
-          context.become(active(outstandingEvents - e.cmdId, optimisticState, upstream))
+            self ! Persisted
         }
       }
-    /*case Persisted(cId) ⇒
-      context.become(active(outstandingEvents - cId, optimisticState, upstream))*/
+      context.become(active(SortedMap[Long, GameTableEvent](), optimisticState, upstream, bSize))
+
+    case Persisted ⇒
+      context.become(active(outstandingEvents, optimisticState, upstream, bSize - 1))
   }
 }

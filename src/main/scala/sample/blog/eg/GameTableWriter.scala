@@ -21,17 +21,15 @@ class GameTableWriter(gt: ActorRef) extends Actor with ActorLogging {
 
   def active(seqNum: Long, c: Cancellable): Receive = {
     case _: Long ⇒
-      gt ! sample.blog.eg.Table0.PlaceBet(seqNum, ThreadLocalRandom.current().nextLong(10l, 15l), 1)
+      gt ! sample.blog.eg.Table0.PlaceBet(seqNum, ThreadLocalRandom.current().nextLong(10L, 15L), 1)
       val next = seqNum + 1L
-      //log.info("push {}", next)
-      //Thread.sleep(200)
-      val c = scheduler.scheduleOnce(200.millis)(self ! next)
+      val c = scheduler.scheduleOnce(20.millis)(self ! next)
       context.become(active(next, c))
 
     case sample.blog.eg.Table0.BackOff ⇒
       c.cancel()
-      log.warning("BackOff !!! Slow down {}", seqNum)
-      val c0 = scheduler.scheduleOnce(5000.millis)(self ! seqNum)
+      //log.warning("BackOff !!! Suspend: {}", seqNum)
+      val c0 = scheduler.scheduleOnce(50.millis)(self ! seqNum)
       context.become(active(seqNum, c0))
     case r: sample.blog.eg.Table0.BetPlacedReply ⇒
     //log.warning("Reply:  {}", r.cmdId)
