@@ -38,6 +38,8 @@ object Table0 {
 
   case class GameTableState(userChips: Map[Long, Int] = Map.empty)
 
+  //case class Persisted(cmdId: Long)
+
   def props = Props(new Table0())
 }
 
@@ -101,9 +103,11 @@ class Table0(waterMark: Int = 1 << 3, chipsLimitPerPlayer: Int = 1000) extends T
           case e: BetPlaced ⇒
             //TODO: send to self and remove from buffer
             upstream.foreach(_ ! BetPlacedReply(e.cmdId, e.playerId))
-          //context.become(active(outstandingEvents - e.cmdId, optimisticState, upstream))
+            //self ! Persisted(e.cmdId)
+          context.become(active(outstandingEvents - e.cmdId, optimisticState, upstream))
         }
       }
-      context.become(active(SortedMap[Long, GameTableEvent](), optimisticState, upstream))
+    /*case Persisted(cId) ⇒
+      context.become(active(outstandingEvents - cId, optimisticState, upstream))*/
   }
 }
