@@ -13,7 +13,7 @@ object KafkaMock {
 /*
 
   If something breaks during our processing we will have never
-  confirmed the message and so it will be re delivered, we won't lose messages
+  confirmed the message so it will be re delivered, we won't lose messages
 
  */
 class KafkaMock(worker: ActorRef) extends Actor with ActorLogging {

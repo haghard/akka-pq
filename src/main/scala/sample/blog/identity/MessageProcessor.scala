@@ -78,10 +78,10 @@ object MessageProcessor {
   a) You can do processing quick enough and confirm messages in time.
   b) You can't do processing quick enough to confirm in time. Once we've read stuff from kafka we need to write it somewhere,
   so that if we crush we recover from the local journal and never forget messages we had received. (PersistentActor + AtLeastOnceDelivery)
-  c) And a) and b) cases we relied in kafka managing message offsets. We also can manage them themselves.
+  c) In a) and b) cases we relied on kafka managing message offsets. We also can manage them themselves.
 
  Kafka manages offsets. Microservice commits once the message is saved in its journal.
- Processing from the microservice's journal.
+ Processing of messages happens from the microservice's journal.
 
  As soon as we have a message we persist it to the local journal,
  so that if we  crush can recover and never forget the messages we had received.
@@ -192,7 +192,7 @@ class MessageProcessor extends PersistentActor with AtLeastOnceDelivery with Act
         if (ThreadLocalRandom.current.nextDouble > 0.95)
           throw TaskError(s"ReceiveCommand error while processing:${request.id}")
 
-        //Once we have guarantied at least once locally, we can confirm to kafka.
+        //As we have guarantied at least once locally, we can confirm to kafka.
         //Important: In should be done within the persist block
         request.sender ! Confirm(taskId)
       }
