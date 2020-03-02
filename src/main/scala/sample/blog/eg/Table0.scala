@@ -80,26 +80,45 @@ class Table0(waterMark: Int = 20, chipsLimitPerPlayer: Int = 1000) extends Timer
 
   def active(outstandingEvents: SortedMap[Long, GameTableEvent], optimisticState: GameTableState, upstream: Option[ActorRef], bSize: Int): Receive = {
     case cmd: PlaceBet ⇒
+      //TODO: Impl idea with 2 buffers, one for outstanding events in memory and the second one for outstanding events persisting at the moment
+      if (outstandingEvents.keySet.size <= waterMark) {
+        //validation should be here!!
+        val ev = BetPlaced(cmd.cmdId, cmd.playerId, cmd.chips)
+        //optimistically update state before persisting events
+        val updatedState = update(ev, optimisticState)
+        val outstandingEventsUpdated = outstandingEvents + (ev.cmdId -> ev)
+        context become active(outstandingEventsUpdated, updatedState, Some(sender()), bSize)
+      } else {
+        //We hope that by the time we fill up current batch the prev one has already been persisted.
+        upstream.foreach(_ ! BackOff)
+        log.warning("BackOff - buffer size: {}: outstanding p-batch:{}. Last cmd id:{}", outstandingEvents.keySet.size, bSize, cmd.cmdId)
+
+        if (bSize == 0) {
+          self ! Flush
+        }
+      }
+
+      /*
       //validation should be here!!
       //log.info("in {}", cmd.cmdId)
       val ev = BetPlaced(cmd.cmdId, cmd.playerId, cmd.chips)
       //optimistically update state before persisting events
       val updatedState = update(ev, optimisticState)
-      val outstandingEventsUpdt = outstandingEvents + (ev.cmdId -> ev)
+      val outstandingEventsUpdated = outstandingEvents + (ev.cmdId -> ev)
 
-      if (outstandingEventsUpdt.keySet.size < waterMark) {
-        context become active(outstandingEventsUpdt, updatedState, Some(sender()), bSize)
+      if (outstandingEventsUpdated.keySet.size < waterMark) {
+        context become active(outstandingEventsUpdated, updatedState, Some(sender()), bSize)
       } else {
         //We hope that by the time we fill up current batch the prev one has already been persisted.
         upstream.foreach(_ ! BackOff)
-        log.warning("BackOff - buffer size: {}: outstanding pers:{}. Last cmd id:{}", outstandingEventsUpdt.keySet.size, bSize, cmd.cmdId)
+        log.warning("BackOff - buffer size: {}: outstanding p-batch:{}. Last cmd id:{}", outstandingEventsUpdated.keySet.size, bSize, cmd.cmdId)
 
         if (bSize == 0) {
           self ! Flush
         }
 
-        context become active(outstandingEventsUpdt, updatedState, upstream, bSize)
-      }
+        context become active(outstandingEventsUpdated, updatedState, upstream, bSize)
+      }*/
     case Flush if outstandingEvents.nonEmpty ⇒
       val bSize = outstandingEvents.keySet.size
       log.info("persist batch [{}]", outstandingEvents.keySet.mkString(","))
