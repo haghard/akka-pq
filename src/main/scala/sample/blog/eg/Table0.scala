@@ -99,6 +99,7 @@ class Table0(waterMark: Int = 1 << 3, chipsLimitPerPlayer: Int = 1000) extends T
         e match {
           //calls for each persisted event
           case e: BetPlaced ⇒
+            //TODO: send to self and remove from buffer
             upstream.foreach(_ ! BetPlacedReply(e.cmdId, e.playerId))
           //context.become(active(outstandingEvents - e.cmdId, optimisticState, upstream))
         }
