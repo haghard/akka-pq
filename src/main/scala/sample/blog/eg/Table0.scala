@@ -30,7 +30,7 @@ object Table0 {
 
   sealed trait GameTableReply
 
-  case object BackOff extends GameTableReply
+  case class BackOff(cmd: PlaceBet) extends GameTableReply
 
   case class BetPlacedReply(cmdId: Long, playerId: Long)
 
@@ -44,7 +44,7 @@ object Table0 {
 }
 
 //Invariant: Number of chips per player should not exceed 100
-class Table0(waterMark: Int = 20, chipsLimitPerPlayer: Int = 1000) extends Timers with PersistentActor with ActorLogging {
+class Table0(waterMark: Int = 8, chipsLimitPerPlayer: Int = 1000) extends Timers with PersistentActor with ActorLogging {
 
   override val persistenceId = "gt-0" //self.path.name
 
@@ -78,9 +78,13 @@ class Table0(waterMark: Int = 20, chipsLimitPerPlayer: Int = 1000) extends Timer
         state
     }
 
-  def active(outstandingEvents: SortedMap[Long, GameTableEvent], optimisticState: GameTableState, upstream: Option[ActorRef], bSize: Int): Receive = {
+  def active(
+    outstandingEvents: SortedMap[Long, GameTableEvent], optimisticState: GameTableState,
+    upstream: Option[ActorRef], bSize: Int
+  ): Receive = {
     case cmd: PlaceBet ⇒
       //TODO: Impl idea with 2 buffers, one for outstanding events in memory and the second one for outstanding events persisting at the moment
+
       if (outstandingEvents.keySet.size <= waterMark) {
         //validation should be here!!
         val ev = BetPlaced(cmd.cmdId, cmd.playerId, cmd.chips)
@@ -90,7 +94,7 @@ class Table0(waterMark: Int = 20, chipsLimitPerPlayer: Int = 1000) extends Timer
         context become active(outstandingEventsUpdated, updatedState, Some(sender()), bSize)
       } else {
         //We hope that by the time we fill up current batch the prev one has already been persisted.
-        upstream.foreach(_ ! BackOff)
+        upstream.foreach(_ ! BackOff(cmd))
         log.warning("BackOff - buffer size: {}: outstanding p-batch:{}. Last cmd id:{}", outstandingEvents.keySet.size, bSize, cmd.cmdId)
 
         if (bSize == 0) {
@@ -98,7 +102,7 @@ class Table0(waterMark: Int = 20, chipsLimitPerPlayer: Int = 1000) extends Timer
         }
       }
 
-      /*
+    /*
       //validation should be here!!
       //log.info("in {}", cmd.cmdId)
       val ev = BetPlaced(cmd.cmdId, cmd.playerId, cmd.chips)
@@ -126,7 +130,7 @@ class Table0(waterMark: Int = 20, chipsLimitPerPlayer: Int = 1000) extends Timer
         e match {
           //calls for each persisted event
           case e: BetPlaced ⇒
-            Thread.sleep(21)
+            Thread.sleep(41)
             //TODO: send to self and remove from buffer
             upstream.foreach(_ ! BetPlacedReply(e.cmdId, e.playerId))
             self ! Persisted
