@@ -50,7 +50,8 @@ class Table0(waterMark: Int = 8, chipsLimitPerPlayer: Int = 1000) extends Timers
 
   timers.startPeriodicTimer(persistenceId, Flush, 2000.millis)
 
-  override def receiveCommand = active(SortedMap[Long, GameTableEvent](), GameTableState(), None, 0)
+  override def receiveCommand =
+    active(SortedMap[Long, GameTableEvent](), GameTableState(), None, 0)
 
   override def receiveRecover: Receive = {
     var map = Map[Long, Int]()
@@ -78,6 +79,11 @@ class Table0(waterMark: Int = 8, chipsLimitPerPlayer: Int = 1000) extends Timers
         state
     }
 
+  def tryFlush(bSize: Int): Unit = {
+    if (bSize == 0)
+      self ! Flush
+  }
+
   def active(
     outstandingEvents: SortedMap[Long, GameTableEvent], optimisticState: GameTableState,
     upstream: Option[ActorRef], bSize: Int
@@ -96,10 +102,7 @@ class Table0(waterMark: Int = 8, chipsLimitPerPlayer: Int = 1000) extends Timers
         //We hope that by the time we fill up current batch the prev one has already been persisted.
         upstream.foreach(_ ! BackOff(cmd))
         log.warning("BackOff - buffer size: {}: outstanding p-batch:{}. Last cmd id:{}", outstandingEvents.keySet.size, bSize, cmd.cmdId)
-
-        if (bSize == 0) {
-          self ! Flush
-        }
+        tryFlush(bSize)
       }
 
     /*
@@ -139,6 +142,8 @@ class Table0(waterMark: Int = 8, chipsLimitPerPlayer: Int = 1000) extends Timers
       context.become(active(SortedMap[Long, GameTableEvent](), optimisticState, upstream, bSize))
 
     case Persisted ⇒
-      context.become(active(outstandingEvents, optimisticState, upstream, bSize - 1))
+      val bSize0 = bSize - 1
+      tryFlush(bSize0)
+      context.become(active(outstandingEvents, optimisticState, upstream, bSize0))
   }
 }

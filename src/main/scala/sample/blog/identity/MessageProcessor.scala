@@ -199,8 +199,8 @@ class MessageProcessor extends PersistentActor with AtLeastOnceDelivery with Act
 
     case Watermark(deliveryId: Long, req: BeginTask) ⇒
       identifyAndProduce(deliveryId, req).onComplete {
-        case Success(recognized) ⇒
-          self ! recognized
+        case Success(commitTask) ⇒
+          self ! commitTask
         case Failure(ex) ⇒
           log.error(ex, "RecognizeFace error {}:{}", req.id, deliveryId)
           //triggers supervision strategy and uses priority queue for Kill message
