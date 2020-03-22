@@ -4,6 +4,7 @@ package object tl {
 
   sealed trait QuerySegment[T] {
     def +[A, TA](other: QuerySegment[A])(implicit ts: ParamConcat.Aux[T, A, TA]): QuerySegment[TA]
+    //def ++[A](other: QuerySegment[A]): QuerySegment[T with A]
   }
 
   object QuerySegment {

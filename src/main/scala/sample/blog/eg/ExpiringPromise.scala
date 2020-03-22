@@ -7,7 +7,7 @@ import scala.concurrent.{ ExecutionContext, Future, Promise }
 import scala.concurrent.duration.FiniteDuration
 import scala.util.control.NoStackTrace
 
-object TimedPromise {
+object ExpiringPromise {
 
   final case class PromiseExpired(timeout: FiniteDuration)
     extends Exception(s"Promise not completed within $timeout!") with NoStackTrace

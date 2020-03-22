@@ -5,9 +5,10 @@ import java.util.concurrent.ThreadLocalRandom
 import akka.actor.{ ActorSystem, Scheduler }
 import akka.stream.QueueOfferResult.{ Dropped, Enqueued }
 import akka.stream.scaladsl.SourceQueueWithComplete
-import akka.stream.{ ActorAttributes, ActorMaterializer, Materializer, OverflowStrategy, QueueOfferResult }
+import akka.stream.{ ActorAttributes, ActorMaterializer, Attributes, Materializer, OverflowStrategy, QueueOfferResult }
 import akka.stream.scaladsl.{ FlowWithContext, Keep, Sink, Source }
 
+import scala.collection.immutable
 import scala.concurrent.duration._
 import scala.concurrent.{ Await, ExecutionContext, Future, Promise }
 
@@ -20,21 +21,69 @@ object StatefulProcess {
   case class ProcessorError(result: QueueOfferResult)
     extends Exception(s"Unexpected queue offer result: $result!")
 
-  trait Cmd
+  sealed trait Cmd {
+    def ts: Long
+  }
 
-  case class AddUser(id: Long) extends Cmd
+  final case class AddUser(id: Long, ts: Long = System.currentTimeMillis) extends Cmd
 
-  case class RmUser(id: Long) extends Cmd
+  final case class RmUser(id: Long, ts: Long = System.currentTimeMillis) extends Cmd
 
-  trait Evn
+  sealed trait Evn
 
-  trait Reply
+  sealed trait Reply
 
-  case class Added(id: Long) extends Reply
+  final case class Added(id: Long) extends Reply
 
-  case class Removed(id: Long) extends Reply
+  final case class Removed(id: Long) extends Reply
 
-  case class UserState(users: Set[Long] = Set.empty, current: Long = -1L, p: Promise[Seq[Reply]] = null)
+  final case class UserState(users: Set[Long] = Set.empty, current: Long = -1L, p: Promise[Seq[Reply]] = null)
+
+  def stateFlowBatched(
+    userState: UserState, bs: Int
+  )(implicit ec: ExecutionContext): FlowWithContext[AddUser, Promise[Reply], Reply, Promise[Reply], Any] = {
+    val atts = Attributes.inputBuffer(1, 1)
+
+    val f = FlowWithContext[AddUser, Promise[Reply]]
+      .withAttributes(atts)
+      .asFlow
+      .mapAsyncUnordered(bs) { cmd ⇒
+        Future {
+          Thread.sleep(ThreadLocalRandom.current.nextInt(50, 100))
+          cmd
+        }
+      }
+      .batch(bs, {
+        case (e, p) ⇒
+          immutable.SortedSet.empty[(AddUser, Promise[Reply])]({
+            case (a, b) ⇒ if (a._1.id < b._1.id) -1 else 1
+          }).+((e, p))
+      })(_ + _)
+      .mapAsync(1) { batch ⇒
+        Future {
+          Thread.sleep(ThreadLocalRandom.current.nextInt(100, 150))
+
+          var lastP: Promise[Reply] = null
+          var lastCmd: AddUser = null
+
+          //println("*************")
+          val it = batch.iterator
+          while (it.hasNext) {
+            val (cmd, p) = it.next
+            //println(cmd)
+            lastP = p
+            lastCmd = cmd
+          }
+          //println(batch.mkString(","))
+          //println("*************")
+
+          //println(s"Batch: ${batch.mkString(",")} - Last: ${lastCmd}")
+          (Added(lastCmd.id), lastP)
+        }
+      }
+
+    FlowWithContext.fromTuples(f) //.withAttributes(atts)
+  }
 
   def stateFlow(
     userState: UserState
@@ -45,12 +94,13 @@ object StatefulProcess {
     }*/
 
     val f = FlowWithContext[Cmd, Promise[Seq[Reply]]]
+      .withAttributes(Attributes.inputBuffer(1, 1))
       .asFlow
       .scan(userState) {
         case (state, (cmd, p)) ⇒
           cmd match {
-            case AddUser(id) ⇒ state.copy(state.users + id, id, p)
-            case RmUser(id)  ⇒ state.copy(state.users - id, id, p)
+            case AddUser(_, id) ⇒ state.copy(state.users + id, id, p)
+            case RmUser(_, id)  ⇒ state.copy(state.users - id, id, p)
           }
       }
       /*.map { state ⇒
@@ -79,8 +129,22 @@ object StatefulProcess {
     implicit val sch = sys.scheduler
     implicit val ec = mat.executionContext
 
+    val bs = 1 << 4
+
     val processor =
-      Source
+      Source.queue[(AddUser, Promise[Reply])](bs, OverflowStrategy.dropNew /*.backpressure*/ )
+        .via(stateFlowBatched(UserState(), bs))
+        .toMat(Sink.foreach {
+          case (reply, p) ⇒
+            //println("confirm batch: " + reply)
+            p.trySuccess(reply)
+        })(Keep.left)
+        //.withAttributes(ActorAttributes.supervisionStrategy(akka.stream.Supervision.resumingDecider))
+        .addAttributes(ActorAttributes.supervisionStrategy(akka.stream.Supervision.resumingDecider))
+        .run()
+
+    /*
+    Source
         .queue[(Cmd, Promise[Seq[Reply]])](1 << 2, OverflowStrategy.dropNew)
         .via(stateFlow(UserState()))
         .toMat(Sink.foreach {
@@ -91,18 +155,50 @@ object StatefulProcess {
         //.withAttributes(ActorAttributes.supervisionStrategy(akka.stream.Supervision.resumingDecider))
         .addAttributes(ActorAttributes.supervisionStrategy(akka.stream.Supervision.resumingDecider))
         .run()
+    */
 
-    val f = produce(0L, processor)
-      .flatMap(_ ⇒ {
-        /*Thread.sleep(3000); */ sys.terminate
-      })
+    //val f = produce(1L, processor).flatMap(_ ⇒ sys.terminate)
+
+    val f = produce0(1L, bs, processor).flatMap(_ ⇒ sys.terminate)
     Await.result(f, Duration.Inf)
+  }
+
+  def produce0(n: Long, bs: Int, processor: SourceQueueWithComplete[(AddUser, Promise[Reply])])(implicit ec: ExecutionContext, sch: Scheduler): Future[Unit] = {
+    val p = ExpiringPromise[Reply](1000.millis)
+    processor.offer((AddUser(n), p))
+      .flatMap {
+        case Enqueued ⇒
+          if (n % bs == 0 || n == 1) {
+            println(s"await $n")
+            p.future
+              .flatMap { reply ⇒
+                println(s"confirm batch: $reply")
+                produce0(n + 1, bs, processor)
+                //akka.pattern.after(50.millis, sch)(produce0(n + 1, bs, processor))
+              }
+              .recoverWith {
+                case err: Throwable ⇒
+                  //retry
+                  println(err.getMessage)
+                  akka.pattern.after(50.millis, sch)(produce0(n, bs, processor))
+              }
+
+          } else produce0(n + 1, bs, processor) // akka.pattern.after(50.millis, sch)(produce0(n + 1, bs, processor))
+        //produce0(n + 1, bs, processor)
+
+        case Dropped ⇒
+          println(s"back off: ${n}")
+          akka.pattern.after(5000.millis, sch)(produce0(n, bs, processor))
+        case other ⇒
+          println(s"Failed: $n")
+          Future.failed(ProcessorError(other))
+      }
   }
 
   def produce(id: Long, processor: SourceQueueWithComplete[(Cmd, Promise[Seq[Reply]])])(implicit ec: ExecutionContext, sch: Scheduler): Future[Long] = {
     if (id <= 100) {
       Future.traverse(Seq(id, id + 1, id + 2, id + 3)) { id ⇒
-        val p = TimedPromise[Seq[Reply]](300.millis)
+        val p = ExpiringPromise[Seq[Reply]](300.millis)
         processor.offer((AddUser(id), p))
           .flatMap {
             case Enqueued ⇒
