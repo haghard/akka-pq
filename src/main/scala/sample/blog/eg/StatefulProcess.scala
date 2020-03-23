@@ -4,9 +4,8 @@ import java.util.concurrent.ThreadLocalRandom
 
 import akka.actor.{ ActorSystem, Scheduler }
 import akka.stream.QueueOfferResult.{ Dropped, Enqueued }
-import akka.stream.scaladsl.SourceQueueWithComplete
+import akka.stream.scaladsl.{ Flow, FlowWithContext, Keep, Sink, Source, SourceQueueWithComplete }
 import akka.stream.{ ActorAttributes, ActorMaterializer, Attributes, Materializer, OverflowStrategy, QueueOfferResult }
-import akka.stream.scaladsl.{ FlowWithContext, Keep, Sink, Source }
 
 import scala.collection.immutable
 import scala.concurrent.duration._
@@ -44,10 +43,37 @@ object StatefulProcess {
   )(implicit ec: ExecutionContext): FlowWithContext[AddUser, Promise[Reply], Reply, Promise[Reply], Any] = {
     val atts = Attributes.inputBuffer(1, 1)
 
+    /*
+    def aboveAverage: Flow[Double, Double, ] =
+        Flow[Double].statefulMapConcat { () ⇒
+          var sum = 0
+          var n   = 0
+          rating ⇒ {
+            sum += rating
+            n += 1
+            val average = sum / n
+            if (rating >= average) rating :: Nil
+            else Nil
+          }
+        }
+    */
+
+    val statefulFlow = Flow[immutable.SortedSet[(AddUser, Promise[Reply])]]
+      .buffer(1, OverflowStrategy.backpressure).statefulMapConcat { () ⇒
+        // mutable state
+        var totalSize = 0L
+
+        batch ⇒ {
+          totalSize += batch.size
+          println(s"********  size: ${batch.size}")
+          List(batch)
+        }
+      }
+
     val f = FlowWithContext[AddUser, Promise[Reply]]
       .withAttributes(atts)
       .asFlow
-      .mapAsyncUnordered(bs) { cmd ⇒
+      .mapAsync(bs) { cmd ⇒
         Future {
           Thread.sleep(ThreadLocalRandom.current.nextInt(50, 100))
           cmd
@@ -59,9 +85,11 @@ object StatefulProcess {
             case (a, b) ⇒ if (a._1.id < b._1.id) -1 else 1
           }).+((e, p))
       })(_ + _)
+      .via(statefulFlow)
+      //.scanAsync()
       .mapAsync(1) { batch ⇒
         Future {
-          Thread.sleep(ThreadLocalRandom.current.nextInt(100, 150))
+          Thread.sleep(ThreadLocalRandom.current.nextInt(100, 200))
 
           var lastP: Promise[Reply] = null
           var lastCmd: AddUser = null
@@ -70,10 +98,11 @@ object StatefulProcess {
           val it = batch.iterator
           while (it.hasNext) {
             val (cmd, p) = it.next
-            //println(cmd)
+            println(cmd)
             lastP = p
             lastCmd = cmd
           }
+          //println("********* size1: " + batch.size)
           //println(batch.mkString(","))
           //println("*************")
 
@@ -129,7 +158,7 @@ object StatefulProcess {
     implicit val sch = sys.scheduler
     implicit val ec = mat.executionContext
 
-    val bs = 1 << 4
+    val bs = 1 << 3
 
     val processor =
       Source.queue[(AddUser, Promise[Reply])](bs, OverflowStrategy.dropNew /*.backpressure*/ )
