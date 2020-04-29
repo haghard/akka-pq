@@ -1,15 +1,14 @@
-package sample.blog.eg
+package sample.blog.processes
 
 import java.util.concurrent.ThreadLocalRandom
-
-import akka.actor.{ ActorSystem, Scheduler }
-import akka.stream.QueueOfferResult.{ Dropped, Enqueued }
-import akka.stream.scaladsl.{ Flow, FlowWithContext, Keep, Sink, Source, SourceQueueWithComplete }
-import akka.stream.{ ActorAttributes, ActorMaterializer, Attributes, Materializer, OverflowStrategy, QueueOfferResult }
+import akka.actor.{ActorSystem, Scheduler}
+import akka.stream.QueueOfferResult.{Dropped, Enqueued}
+import akka.stream.scaladsl.{Flow, FlowWithContext, Keep, Sink, Source, SourceQueueWithComplete}
+import akka.stream.{ActorAttributes, ActorMaterializer, Attributes, Materializer, OverflowStrategy, QueueOfferResult}
 
 import scala.collection.immutable
 import scala.concurrent.duration._
-import scala.concurrent.{ Await, ExecutionContext, Future, Promise }
+import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 
 //runMain sample.blog.eg.StatefulProcess
 object StatefulProcess {
@@ -38,10 +37,20 @@ object StatefulProcess {
 
   final case class UserState(users: Set[Long] = Set.empty, current: Long = -1L, p: Promise[Seq[Reply]] = null)
 
-  def stateFlowBatched(
-    userState: UserState, bs: Int
+  def statefulBatchedFlow(
+    initialState: UserState, bs: Int
   )(implicit ec: ExecutionContext): FlowWithContext[AddUser, Promise[Reply], Reply, Promise[Reply], Any] = {
     val atts = Attributes.inputBuffer(1, 1)
+    /*
+    TODO: Check it out
+    val a = Flow[Int].map(_ * 2)
+    val b = Flow[Int].statefulMapConcat { () =>
+       in => {
+        List(in)
+       }
+    }
+    a.via(b)
+    */
 
     /*
     def aboveAverage: Flow[Double, Double, ] =
@@ -59,11 +68,15 @@ object StatefulProcess {
     */
 
     val statefulFlow = Flow[immutable.SortedSet[(AddUser, Promise[Reply])]]
-      .buffer(1, OverflowStrategy.backpressure).statefulMapConcat { () ⇒
-        // mutable state
+      .buffer(1, OverflowStrategy.backpressure)
+      .statefulMapConcat { () ⇒
+
+        // mutable state goes here
+        var userState = initialState
         var totalSize = 0L
 
         batch ⇒ {
+          userState = userState.copy(userState.users ++ batch.map(_._1.id))
           totalSize += batch.size
           println(s"********  size: ${batch.size}")
           List(batch)
@@ -86,7 +99,6 @@ object StatefulProcess {
           }).+((e, p))
       })(_ + _)
       .via(statefulFlow)
-      //.scanAsync()
       .mapAsync(1) { batch ⇒
         Future {
           Thread.sleep(ThreadLocalRandom.current.nextInt(100, 200))
@@ -111,7 +123,7 @@ object StatefulProcess {
         }
       }
 
-    FlowWithContext.fromTuples(f) //.withAttributes(atts)
+    FlowWithContext.fromTuples(f)
   }
 
   def stateFlow(
@@ -162,7 +174,7 @@ object StatefulProcess {
 
     val processor =
       Source.queue[(AddUser, Promise[Reply])](bs, OverflowStrategy.dropNew /*.backpressure*/ )
-        .via(stateFlowBatched(UserState(), bs))
+        .via(statefulBatchedFlow(UserState(), bs))
         .toMat(Sink.foreach {
           case (reply, p) ⇒
             //println("confirm batch: " + reply)

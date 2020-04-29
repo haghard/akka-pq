@@ -1,6 +1,6 @@
-package sample.blog.eg
+package sample.blog.processes
 
-import sample.blog.eg.Table0.GameTableEvent
+import sample.blog.processes.Table0.GameTableEvent
 import akka.stream.{ Attributes, FlowShape, Inlet, Outlet }
 import akka.stream.stage.{ GraphStage, GraphStageLogic, InHandler, OutHandler, StageLogging }
 

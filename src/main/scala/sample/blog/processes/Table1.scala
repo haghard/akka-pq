@@ -1,4 +1,4 @@
-package sample.blog.eg
+package sample.blog.processes
 
 import akka.actor.{ ActorLogging, ActorRef, Timers }
 import akka.persistence.{ AtLeastOnceDelivery, PersistentActor, RecoveryCompleted }

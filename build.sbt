@@ -2,7 +2,7 @@ import com.typesafe.sbt.SbtMultiJvm.MultiJvmKeys.MultiJvm
 import com.typesafe.sbt.SbtMultiJvm.multiJvmSettings
 import scalariform.formatter.preferences._
 
-val akkaVersion = "2.5.26"
+val akkaVersion = "2.5.30"
 
 name := "akka-pq"
 version := "1.0"
@@ -48,7 +48,9 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-cluster" % akkaVersion,
   "com.typesafe.akka" %% "akka-cluster-tools" % akkaVersion,
   "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
-  "com.typesafe.akka" %% "akka-persistence-cassandra" % "0.102",
+  "com.typesafe.akka" %% "akka-persistence-cassandra" % "0.103",
+  "com.lightbend.akka.management" %% "akka-management-cluster-http" % "1.0.6",
+
   "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
   "ch.qos.logback" % "logback-classic" % "1.2.3",
 
