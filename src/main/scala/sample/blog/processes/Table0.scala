@@ -1,8 +1,9 @@
-package sample.blog.eg
+package sample.blog.processes
 
-import akka.actor.{ ActorLogging, ActorRef, Props, Timers }
+import akka.actor.{ActorLogging, ActorRef, Props, Timers}
 import akka.persistence.PersistentActor
-import sample.blog.eg.Table0._
+import akka.stream.scaladsl.RestartWithBackoffFlow
+import sample.blog.processes.Table0._
 
 import scala.collection.immutable.SortedMap
 import scala.concurrent.duration._
@@ -46,11 +47,11 @@ object Table0 {
 //Invariant: Number of chips per player should not exceed 100
 class Table0(waterMark: Int = 8, chipsLimitPerPlayer: Int = 1000) extends Timers with PersistentActor with ActorLogging {
 
-  override val persistenceId = "gt-0" //self.path.name
+  override val persistenceId = "table-0" //self.path.name
 
   timers.startPeriodicTimer(persistenceId, Flush, 2000.millis)
 
-  override def receiveCommand =
+  override def receiveCommand: Receive =
     active(SortedMap[Long, GameTableEvent](), GameTableState(), None, 0)
 
   override def receiveRecover: Receive = {
@@ -89,6 +90,8 @@ class Table0(waterMark: Int = 8, chipsLimitPerPlayer: Int = 1000) extends Timers
     upstream: Option[ActorRef], bSize: Int
   ): Receive = {
     case cmd: PlaceBet ⇒
+      
+
       //TODO: Impl idea with 2 buffers, one for outstanding events in memory and the second one for outstanding events persisting at the moment
 
       if (outstandingEvents.keySet.size <= waterMark) {

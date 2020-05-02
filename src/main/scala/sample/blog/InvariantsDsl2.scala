@@ -48,8 +48,7 @@ object InvariantsDsl2 {
     }
   }
 
-  trait BasicDsl {
-    self ⇒
+  trait BasicDsl { self ⇒
 
     def and[A, B](l: Dsl[R], r: Dsl[R]): Dsl[R] = new Dsl[R] {
       override def apply[F[_]](implicit C: Ops[F]): F[R] =

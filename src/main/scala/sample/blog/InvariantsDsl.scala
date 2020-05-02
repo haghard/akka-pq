@@ -332,7 +332,7 @@ object InvariantsDsl {
 
   import cats.instances._
   import cats.implicits._
-  //import cats.implicits._
+
   import cats.syntax.applicative
   //scala.util.Try or scala.util.Either
 
@@ -365,23 +365,6 @@ object InvariantsDsl {
       }
   }
 
-  sealed trait Op { self ⇒
-    def +(other: Op): Op = Both(self, other)
-  }
-  final case class Both(a: Op, b: Op) extends Op
-  final case class Cmd(input: String) extends Op
-
-  val cmds = Cmd("hello") + Cmd("word") + Cmd("!!!")
-  run(cmds)
-
-  def run(op: Op): Unit = op match {
-    case Both(a, b) ⇒
-      run(a)
-      run(b)
-    case in: Cmd ⇒
-      println(s"... $in")
-  }
-
   //doWhile(List.range(1, 10), 6)
   //doWhile(Option(1), 3)
 
@@ -393,12 +376,11 @@ object InvariantsDsl {
       .getOrElse(E.raiseError(new Exception(s"Could not find $e")))
   }
 
-  //findM[scala.util.Try, Int](List(1, 2, 3, 4, 5), 4)
+  findM[scala.util.Try, Int](List(1, 2, 3, 4, 5), 4)
 
   find[scala.util.Try, Int](List(1, 2, 3, 4, 5), 4)
 
   type OrError[T] = scala.util.Either[Throwable, T]
-
   find[OrError, Int](List(1, 2, 3, 4, 5), 4)
   find[({ type λ[x] = scala.util.Either[Throwable, x] })#λ, Int](List(1, 2, 3, 4, 5), 4)
 
@@ -470,6 +452,26 @@ object InvariantsDsl {
       .&&(uniqueSpec(1, Set(2, 3, 4, 6)) or uniqueSpec(3, Set(2, 3, 4, 6)))
 
     println("> " + expOr(interp))
+
+    /*
+    sealed trait Op { self ⇒
+        def +(other: Op): Op = Both(self, other)
+      }
+      final case class Both(a: Op, b: Op) extends Op
+      final case class Cmd(input: String) extends Op
+
+      val cmds = Cmd("hello") + Cmd("word") + Cmd("!!!")
+      run(cmds)
+
+      def run(op: Op): Unit = op match {
+        case Both(a, b) ⇒
+          run(a)
+          run(b)
+        case in: Cmd ⇒
+          println(s"... $in")
+      }
+     */
+
   }
 
 }

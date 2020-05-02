@@ -1,4 +1,4 @@
-package sample.blog.eg
+package sample.blog.processes
 
 import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.locks.LockSupport
