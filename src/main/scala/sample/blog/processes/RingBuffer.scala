@@ -18,15 +18,15 @@ class RingBuffer[T: ClassTag] private (capacity: Int, mask: Int, buffer: Array[T
       Array.ofDim[T](RingBuffer.nextPowerOfTwo(capacity)))
   }
 
-  def add(e: T): Unit = {
+  def offer(e: T): Boolean = {
     val wrapPoint = tail - capacity
-    if (head <= wrapPoint) {
-      head = head + 1
+    if (head <= wrapPoint) false
+    else {
+      val ind = (tail & mask).toInt
+      buffer(ind) = e
+      tail = tail + 1
+      true
     }
-
-    val ind = (tail % capacity).toInt
-    buffer(ind) = e
-    tail = tail + 1
   }
 
   def poll(): Option[T] =
@@ -39,7 +39,7 @@ class RingBuffer[T: ClassTag] private (capacity: Int, mask: Int, buffer: Array[T
       Some(element)
     }
 
-  def entries: Array[T] = {
+  def toArray: Array[T] = {
     var i = head
     var j = 0
     val copy = if (tail > capacity) Array.ofDim[T](capacity) else Array.ofDim[T](tail.toInt)
