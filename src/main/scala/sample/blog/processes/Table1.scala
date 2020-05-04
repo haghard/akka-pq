@@ -9,7 +9,7 @@ import scala.concurrent.duration._
 
 /**
  *
- * Unreliable, high-throughput persistent actor that uses batching to persist.
+ * High-throughput persistent actor that persists in batches.
  */
 object Table1 {
 
@@ -49,6 +49,7 @@ class Table1(upstream: ActorRef, limit: Int = 1 << 4, chipsLimitPerPlayer: Int =
 
   override def receiveCommand = active(0, Map.empty, GameTableState1())
 
+  //periodic flush
   timers.startPeriodicTimer(persistenceId, Flush1, flushPeriod)
 
   // During recovery, only messages with an un-confirmed delivery id will be resent.

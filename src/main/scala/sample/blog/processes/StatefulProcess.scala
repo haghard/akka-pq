@@ -42,7 +42,7 @@ object StatefulProcess {
 
   final case class UserState(users: Set[Long] = Set.empty, current: Long = -1L /*, p: Promise[Seq[Reply]] = null*/ )
 
-  final case class UserState0(users: Set[Long] = Set.empty, seqNum: Long = 1L)
+  final case class UserState0(users: Set[Long] = Set.empty, nextSeqNum: Long = 1L)
 
   /*val sourceWithContext: SourceWithContext[Msg, MsgContext, NotUsed] =
     SourceWithContext
@@ -139,15 +139,15 @@ object StatefulProcess {
         val (c, p) = cp.get
         c match {
           case AddUser(seqNum, id) ⇒
-            if (s.seqNum == seqNum) {
-              println(s.seqNum + ":" + seqNum)
-              updateState(i + 1, rb, s.copy(s.users + id, s.seqNum + 1), p)
+            if (s.nextSeqNum == seqNum) {
+              println(s.nextSeqNum + ":" + seqNum)
+              updateState(i + 1, rb, s.copy(s.users + id, s.nextSeqNum + 1), p)
             } else {
-              println(s.seqNum + ":" + seqNum + " duplicate")
+              println(s.nextSeqNum + ":" + seqNum + " duplicate")
               updateState(i + 1, rb, s, p)
             }
           case RmUser(seqNum, id) ⇒
-            if (s.seqNum == seqNum) updateState(i + 1, rb, s.copy(s.users - id, s.seqNum + 1), p)
+            if (s.nextSeqNum == seqNum) updateState(i + 1, rb, s.copy(s.users - id, s.nextSeqNum + 1), p)
             else updateState(i + 1, rb, s, p)
         }
       }
@@ -182,7 +182,7 @@ object StatefulProcess {
           val currState = stateWithPromise._1
           val size = rb.size
           val (state, p) = updateState(0, rb, currState, stateWithPromise._2)
-          //println(s"batch.size:$size  state.seqNum:${state.seqNum}")
+          println(s"batch.size:$size  state.seqNum:${state.nextSeqNum}")
           (state, p)
       }
       .mapAsync(1) { stateWithPromise ⇒
@@ -192,8 +192,8 @@ object StatefulProcess {
           val state = stateWithPromise._1
           val p = stateWithPromise._2
 
-          println(s"Persist seqNum: ${state.seqNum}")
-          (Added(state.seqNum), p)
+          println(s"Persist seqNum: ${state.nextSeqNum}")
+          (Added(state.nextSeqNum), p)
         }
       }
 
@@ -346,7 +346,7 @@ object StatefulProcess {
     queue.offer(AddUser(n) -> p)
       .flatMap {
         case Enqueued ⇒
-          if (n % maxInFlight == 0 /*|| n == 1*/ ) {
+          if (n % maxInFlight == 0) {
             p.future
               .flatMap { reply ⇒
                 //println(s"confirm batch: $reply")

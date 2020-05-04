@@ -8,12 +8,18 @@ import sample.blog.processes.Table0._
 import scala.collection.immutable.SortedMap
 import scala.concurrent.duration._
 
-//https://doc.akka.io/docs/alpakka/current/avroparquet.html
-
 /**
- * Unreliable, high-throughput persistent actor that uses batching to persist.
- * Can lose incoming commands.
+ * High-throughput persistent actor that uses batching to persist.
  * The goal of this is to adapt to dynamic workload.
+ *
+ *
+ * https://blog.colinbreck.com/maximizing-throughput-for-akka-streams/
+ * https://blog.colinbreck.com/partitioning-akka-streams-to-maximize-throughput/
+ * https://blog.colinbreck.com/akka-streams-a-motivating-example/
+ *
+ * https://youtu.be/MzosGtjJdPg
+ *
+ *
  */
 object Table0 {
 
@@ -44,7 +50,13 @@ object Table0 {
   def props = Props(new Table0())
 }
 
-//Invariant: Number of chips per player should not exceed 100
+/**
+ * The problems we're addressing:
+ *  batching requests
+ *  scheduling events
+ *  flow control
+ * They are common problems when dealing with streaming data.
+ */
 class Table0(waterMark: Int = 8, chipsLimitPerPlayer: Int = 1000) extends Timers with PersistentActor with ActorLogging {
 
   override val persistenceId = "table-0" //self.path.name
@@ -68,6 +80,7 @@ class Table0(waterMark: Int = 8, chipsLimitPerPlayer: Int = 1000) extends Timers
     }
   }
 
+  //Invariant: Number of chips per player should not exceed 100
   def update(event: GameTableEvent, state: GameTableState): GameTableState =
     event match {
       case e: BetPlaced ⇒
@@ -90,10 +103,6 @@ class Table0(waterMark: Int = 8, chipsLimitPerPlayer: Int = 1000) extends Timers
     upstream: Option[ActorRef], bSize: Int
   ): Receive = {
     case cmd: PlaceBet ⇒
-      
-
-      //TODO: Impl idea with 2 buffers, one for outstanding events in memory and the second one for outstanding events persisting at the moment
-
       if (outstandingEvents.keySet.size <= waterMark) {
         //validation should be here!!
         val ev = BetPlaced(cmd.cmdId, cmd.playerId, cmd.chips)
@@ -132,10 +141,19 @@ class Table0(waterMark: Int = 8, chipsLimitPerPlayer: Int = 1000) extends Timers
     case Flush if outstandingEvents.nonEmpty ⇒
       val bSize = outstandingEvents.keySet.size
       log.info("persist batch [{}]", outstandingEvents.keySet.mkString(","))
+
+      /*
+      val env = Envelope(outstandingEvents)
+      //confirm in batches
+      persistAsync(env) { e =>
+        ???
+      }
+      */
       persistAllAsync(outstandingEvents.values.toSeq) { e ⇒
         e match {
           //calls for each persisted event
           case e: BetPlaced ⇒
+            // Who knows how long to sleep ¯\_(ツ)_/¯?
             Thread.sleep(41)
             //TODO: send to self and remove from buffer
             upstream.foreach(_ ! BetPlacedReply(e.cmdId, e.playerId))
