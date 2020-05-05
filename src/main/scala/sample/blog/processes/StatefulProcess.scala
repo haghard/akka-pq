@@ -177,6 +177,7 @@ object StatefulProcess {
         rb.offer(e)
         rb
       })
+      // the performance gain come from keeping the downstream more saturated
       .scan((userState, Promise[Reply]())) {
         case (stateWithPromise, rb) ⇒
           val currState = stateWithPromise._1
