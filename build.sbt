@@ -2,7 +2,7 @@ import com.typesafe.sbt.SbtMultiJvm.MultiJvmKeys.MultiJvm
 import com.typesafe.sbt.SbtMultiJvm.multiJvmSettings
 import scalariform.formatter.preferences._
 
-val akkaVersion = "2.5.30"
+val akkaVersion = "2.5.31"
 
 name := "akka-pq"
 version := "1.0"
