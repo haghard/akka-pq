@@ -153,10 +153,10 @@ object StatefulProcess {
       }
     }
 
-    //1. fan-out stage which reserves order as received from upstream
-    //2. collect enriched commands in a buffer
-    //3. foreach cmd  we do f(state, cmd) => (state', promise)
-    //4. persist state resulted from applying multiple events
+    //1. `mapAsync` fan-out stage which reserves order as received from upstream
+    //2. `batch` collect enriched commands in a buffer
+    //3. `scan` foreach cmd we sequentially run f(state, cmd) => (state', promise)
+    //4. `mapAsync(1)` persist state resulted from applying the batch
     val f = FlowWithContext[Cmd, Promise[Reply]]
       .withAttributes(Attributes.inputBuffer(bs, bs))
       .mapAsync(4) { cmd ⇒
@@ -312,9 +312,10 @@ object StatefulProcess {
     akka.util.Unsafe.fastHash(k)
 
   def produce0(n: Long, maxInFlight: Int, queue: SourceQueueWithComplete[(AddUser, Promise[Reply])])(implicit ec: ExecutionContext, sch: Scheduler): Future[Unit] = {
-    val confirmationTimeout = 1000.millis //delivery should be confirmed withing this timeout.
-    //What we're saying here is that withing this timeout we are able to handle batch of bs messages. Basically we confirm in batches
+    val confirmationTimeout = 1000.millis //delivery of the whole batch should be confirmed withing this timeout.
+    //What we're saying here is that within this timeout we are able to handle batch of messages. Basically we confirm in batches
 
+    //The flow control is driven by the consumer side, which means that the producer will not send faster than consumer can confirm the batches
     val p = ExpiringPromise[Reply](confirmationTimeout)
     queue.offer(AddUser(n) -> p)
       .flatMap {
@@ -347,8 +348,10 @@ object StatefulProcess {
 
   def produce(n: Long, maxInFlight: Int, queue: SourceQueueWithComplete[(Cmd, Promise[Reply])])(implicit ec: ExecutionContext, sch: Scheduler): Future[Long] = {
     val confirmationTimeout = 600.millis //delivery of batch should be confirmed withing this timeout
+    //What we're saying here is that within this timeout we are able to handle batch of messages. Basically we confirm in batches
+
+    //The flow control is driven by the consumer side, which means that the producer will not send faster than consumer can confirm the batches
     val p = ExpiringPromise[Reply](confirmationTimeout)
-    //confirm in batches
     queue.offer(AddUser(n) -> p)
       .flatMap {
         case Enqueued ⇒
