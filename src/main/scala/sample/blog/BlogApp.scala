@@ -57,7 +57,7 @@ object BlogApp {
         extractShardId  = Post.shardResolver)
 
       system.terminate()
-      
+
       if (port != "2551" && port != "2552")
         system.actorOf(Props[Bot], "bot")
     }

@@ -82,7 +82,7 @@ libraryDependencies ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
 
-  ("com.lihaoyi" % "ammonite" % "2.1.0" % "test").cross(CrossVersion.full),
+  ("com.lihaoyi" % "ammonite" % "2.1.4" % "test").cross(CrossVersion.full),
 
   "org.iq80.leveldb" % "leveldb" % "0.7" % "test",
   "org.fusesource.leveldbjni" % "leveldbjni-all" % "1.8" % "test",

@@ -79,7 +79,8 @@ object InvariantsDsl2 {
     override def inMap[T](in: T, state: Map[T, _], name: String): Id[R] =
       state.get(in).fold[R](Some(List(s"$name failed")))(_ ⇒ None)
 
-    override def and[A, B](a: Id[R], b: Id[R]): Id[R] =
+    override def and[A, B](a: Id[R], b: Id[R]): Id[R] = {
+      println(s"DEBUG: $a && $b")
       a match {
         case Some(_) ⇒
           b match {
@@ -92,9 +93,11 @@ object InvariantsDsl2 {
             case None    ⇒ None
           }
       }
+    }
 
     //cats.Apply[Option].map2(l, r) { (a, b) ⇒ a ::: b }
-    override def or[A, B](a: Id[R], b: Id[R]): Id[R] =
+    override def or[A, B](a: Id[R], b: Id[R]): Id[R] = {
+      println(s"DEBUG: $a or $b")
       a match {
         case Some(_) ⇒
           b match {
@@ -107,6 +110,7 @@ object InvariantsDsl2 {
             case None    ⇒ None
           }
       }
+    }
   }
 
   object Preconditions extends BasicDsl with CheckProdDsl with CheckSpecDsl

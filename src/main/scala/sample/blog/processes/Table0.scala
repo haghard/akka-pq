@@ -1,6 +1,6 @@
 package sample.blog.processes
 
-import akka.actor.{ActorLogging, ActorRef, Props, Timers}
+import akka.actor.{ ActorLogging, ActorRef, Props, Timers }
 import akka.persistence.PersistentActor
 import akka.stream.scaladsl.RestartWithBackoffFlow
 import sample.blog.processes.Table0._

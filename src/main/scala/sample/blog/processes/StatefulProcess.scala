@@ -157,9 +157,8 @@ object StatefulProcess {
     //2. collect enriched commands in a buffer
     //3. foreach cmd  we do f(state, cmd) => (state', promise)
     //4. persist state resulted from applying multiple events
-
     val f = FlowWithContext[Cmd, Promise[Reply]]
-      .withAttributes(Attributes.inputBuffer(1, 1))
+      .withAttributes(Attributes.inputBuffer(bs, bs))
       .mapAsync(4) { cmd ⇒
         Future {
           //enrich commands
@@ -168,6 +167,7 @@ object StatefulProcess {
         }
       }
       .asFlow
+      // the performance gain come from keeping the downstream more saturated
       .batch(bs, {
         case (e, p) ⇒
           val rb = new RingBuffer[(Cmd, Promise[Reply])](bs)
@@ -177,7 +177,6 @@ object StatefulProcess {
         rb.offer(e)
         rb
       })
-      // the performance gain come from keeping the downstream more saturated
       .scan((userState, Promise[Reply]())) {
         case (stateWithPromise, rb) ⇒
           val currState = stateWithPromise._1
@@ -217,6 +216,7 @@ object StatefulProcess {
       }
     }
 
+    // the performance gain come from keeping the downstream more saturated
     val rbFlow = Flow[(Cmd, Promise[Reply])] //
       .conflateWithSeed({ cmd ⇒
         val rb = new RingBuffer[(Cmd, Promise[Reply])](bs)
@@ -295,7 +295,7 @@ object StatefulProcess {
     //long running stateful stream
     val processor =
       Source
-        .queue[(Cmd, Promise[Reply])](bs, OverflowStrategy.dropNew)
+        .queue[(Cmd, Promise[Reply])](bs, OverflowStrategy.backpressure)
         .via(statefulBatchedFlow1(UserState0(), bs))
         .toMat(Sink.foreach {
           case (replies, p) ⇒ p.trySuccess(replies)
@@ -308,9 +308,13 @@ object StatefulProcess {
     Await.result(f, Duration.Inf)
   }
 
+  def hash(k: String): Int =
+    akka.util.Unsafe.fastHash(k)
+
   def produce0(n: Long, maxInFlight: Int, queue: SourceQueueWithComplete[(AddUser, Promise[Reply])])(implicit ec: ExecutionContext, sch: Scheduler): Future[Unit] = {
     val confirmationTimeout = 1000.millis //delivery should be confirmed withing this timeout.
     //What we're saying here is that withing this timeout we are able to handle batch of bs messages. Basically we confirm in batches
+
     val p = ExpiringPromise[Reply](confirmationTimeout)
     queue.offer(AddUser(n) -> p)
       .flatMap {
@@ -342,8 +346,9 @@ object StatefulProcess {
   }
 
   def produce(n: Long, maxInFlight: Int, queue: SourceQueueWithComplete[(Cmd, Promise[Reply])])(implicit ec: ExecutionContext, sch: Scheduler): Future[Long] = {
-    val confirmationTimeout = 600.millis //delivery should be confirmed withing this timeout
+    val confirmationTimeout = 600.millis //delivery of batch should be confirmed withing this timeout
     val p = ExpiringPromise[Reply](confirmationTimeout)
+    //confirm in batches
     queue.offer(AddUser(n) -> p)
       .flatMap {
         case Enqueued ⇒
@@ -351,6 +356,7 @@ object StatefulProcess {
             p.future
               .flatMap { reply ⇒
                 //println(s"confirm batch: $reply")
+                //confirm in batches
                 produce(n + 1, maxInFlight, queue)
               }
               .recoverWith {
