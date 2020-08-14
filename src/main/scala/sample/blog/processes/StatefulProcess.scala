@@ -13,7 +13,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{ Await, ExecutionContext, Future, Promise }
 
 //runMain sample.blog.eg.StatefulProcess
-////https://blog.softwaremill.com/painlessly-passing-message-context-through-akka-streams-1615b11efc2c
+//https://blog.softwaremill.com/painlessly-passing-message-context-through-akka-streams-1615b11efc2c
 object StatefulProcess {
 
   case class ProcessorUnavailable(name: String)
@@ -67,7 +67,6 @@ object StatefulProcess {
         }
       }
   */
-  //https://blog.softwaremill.com/painlessly-passing-message-context-through-akka-streams-1615b11efc2c
   def statefulBatchedFlow(
     userState: UserState0, bs: Int
   )(implicit ec: ExecutionContext): FlowWithContext[AddUser, Promise[Reply], Reply, Promise[Reply], Any] = {
@@ -128,6 +127,72 @@ object StatefulProcess {
     FlowWithContext.fromTuples(f)
   }
 
+  def statefulBatchedFlow2(
+    userState: UserState0, bs: Int
+  )(implicit ec: ExecutionContext): FlowWithContext[Cmd, Promise[Reply], Reply, Promise[Reply], Any] = {
+    //1. `mapAsync` fan-out stage which reserves order as received from upstream
+    //2. `batch` collect enriched commands in a buffer
+    //3. `scan` foreach cmd we sequentially run f(state, cmd) => (state, promise)
+    //4. `mapAsync(1)` persist state resulted from applying one event
+    val f0 = Flow.fromMaterializer { (mat, attr) ⇒
+      val ec   = mat.executionContext
+      val disp = attr.get[ActorAttributes.Dispatcher].get
+      val buf = attr.get[akka.stream.Attributes.InputBuffer].get
+      //println("attributes: " + attr.attributeList.mkString(","))
+
+      FlowWithContext[Cmd, Promise[Reply]]
+        .withAttributes(Attributes.inputBuffer(bs, bs))
+        //The mapAsync flow stage introduces asynchrony because the future will be executed on a thread of the execution context,
+        //rather than in-line by the actor executing the flow stage — but it does not introduce an asynchronous boundary into the flow.
+        .mapAsync(bs) { cmd ⇒
+          Future {
+            //enrich commands
+            Thread.sleep(ThreadLocalRandom.current.nextInt(20, 50))
+            cmd
+          }(ec)
+        }
+        .asFlow
+        //When an asynchronous boundary is introduced, it inserts a buffer between asynchronous processing stage,
+        //to support a windowed backpressure-strategy, where new elements are requested in batches, to amortize the cost
+        //of requesting elements across the asynchronous boundary between stages.
+        .async(disp.dispatcher, buf.max)
+        .scan((userState, Promise[Reply]())) {
+          case (stateWithPromise, elem) ⇒
+            val cmd = elem._1
+            val p = elem._2
+            val state = stateWithPromise._1
+
+            cmd match {
+              case AddUser(seqNum, id) ⇒
+                if (state.nextSeqNum == seqNum) {
+                  (state.copy(state.users + id, state.nextSeqNum + 1), p)
+                } else {
+                  println(state.nextSeqNum + ":" + seqNum + " duplicate")
+                  (state, p)
+                }
+              case RmUser(seqNum, id) ⇒
+                if (state.nextSeqNum == seqNum) (state.copy(state.users - id, state.nextSeqNum + 1), p)
+                else {
+                  println(state.nextSeqNum + ":" + seqNum + " duplicate")
+                  (state, p)
+                }
+            }
+        }
+        .mapAsync(1) { stateWithPromise ⇒
+          Future {
+            //Persist
+            Thread.sleep(ThreadLocalRandom.current.nextInt(250, 300))
+            val state = stateWithPromise._1
+            val p = stateWithPromise._2
+
+            println(s"Persist seqNum: ${state.nextSeqNum}")
+            (Added(state.nextSeqNum), p)
+          }(ec)
+        }
+    }
+    FlowWithContext.fromTuples(f0)
+  }
+
   def statefulBatchedFlow1(
     userState: UserState0, bs: Int
   )(implicit ec: ExecutionContext): FlowWithContext[Cmd, Promise[Reply], Reply, Promise[Reply], Any] = {
@@ -155,11 +220,11 @@ object StatefulProcess {
 
     //1. `mapAsync` fan-out stage which reserves order as received from upstream
     //2. `batch` collect enriched commands in a buffer
-    //3. `scan` foreach cmd we sequentially run f(state, cmd) => (state', promise)
+    //3. `scan` foreach cmd we sequentially run f(state, cmd) => (state, promise)
     //4. `mapAsync(1)` persist state resulted from applying the batch
     val f = FlowWithContext[Cmd, Promise[Reply]]
       .withAttributes(Attributes.inputBuffer(bs, bs))
-      .mapAsync(4) { cmd ⇒
+      .mapAsync(bs) { cmd ⇒
         Future {
           //enrich commands
           Thread.sleep(ThreadLocalRandom.current.nextInt(20, 50))
@@ -167,7 +232,8 @@ object StatefulProcess {
         }
       }
       .asFlow
-      // the performance gain come from keeping the downstream more saturated
+      // The performance gain comes from keeping the downstream more saturated,
+      // especially if it's not uniform workload
       .batch(bs, {
         case (e, p) ⇒
           val rb = new RingBuffer[(Cmd, Promise[Reply])](bs)
@@ -196,7 +262,6 @@ object StatefulProcess {
           (Added(state.nextSeqNum), p)
         }
       }
-
     FlowWithContext.fromTuples(f)
   }
 
@@ -229,7 +294,7 @@ object StatefulProcess {
 
     val f = FlowWithContext[Cmd, Promise[Reply]]
       .withAttributes(Attributes.inputBuffer(1, 1))
-      .mapAsync(4) { cmd ⇒
+      .mapAsync(bs) { cmd ⇒
         Future {
           Thread.sleep(ThreadLocalRandom.current.nextInt(20, 50))
           cmd
@@ -264,10 +329,9 @@ object StatefulProcess {
     val bs = 1 << 3
 
     implicit val sys: ActorSystem = ActorSystem("streams")
-    implicit val mat: Materializer = ActorMaterializer()
 
     implicit val sch = sys.scheduler
-    implicit val ec = mat.executionContext
+    implicit val ec = sys.dispatcher
 
     val processor =
       Source.queue[(AddUser, Promise[Reply])](bs, OverflowStrategy.dropNew /*.backpressure*/ )
@@ -287,10 +351,9 @@ object StatefulProcess {
     val bs = 1 << 2 //maxInFlight
 
     implicit val sys: ActorSystem = ActorSystem("streams")
-    implicit val mat: Materializer = ActorMaterializer()
 
     implicit val sch = sys.scheduler
-    implicit val ec = mat.executionContext
+    implicit val ec = sys.dispatcher
 
     //long running stateful stream
     val processor =
@@ -338,7 +401,7 @@ object StatefulProcess {
         //produce0(n + 1, bs, processor)
 
         case Dropped ⇒
-          println(s"back off: ${n}")
+          println(s"back off: $n")
           akka.pattern.after(5000.millis, sch)(produce0(n, maxInFlight, queue))
         case other ⇒
           println(s"Failed: $n")

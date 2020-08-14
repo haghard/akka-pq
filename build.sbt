@@ -2,11 +2,11 @@ import com.typesafe.sbt.SbtMultiJvm.MultiJvmKeys.MultiJvm
 import com.typesafe.sbt.SbtMultiJvm.multiJvmSettings
 import scalariform.formatter.preferences._
 
-val akkaVersion = "2.5.31"
+val akkaVersion = "2.6.8"
 
 name := "akka-pq"
 version := "1.0"
-scalaVersion := "2.13.2"
+scalaVersion := "2.13.3"
 
 val root = project
   .in(file("."))
@@ -43,13 +43,12 @@ val root = project
     javaOptions ++= Seq("-Xmx3G", "-XX:MaxMetaspaceSize=2G", "-XX:+UseG1GC")
   )
 
-
 libraryDependencies ++= Seq(
-  "com.typesafe.akka" %% "akka-cluster" % akkaVersion,
-  "com.typesafe.akka" %% "akka-cluster-tools" % akkaVersion,
-  "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
-  "com.typesafe.akka" %% "akka-persistence-cassandra" % "0.103",
-  "com.lightbend.akka.management" %% "akka-management-cluster-http" % "1.0.6",
+  "com.typesafe.akka" %% "akka-cluster"                             % akkaVersion,
+  "com.typesafe.akka" %% "akka-cluster-tools"                       % akkaVersion,
+  "com.typesafe.akka" %% "akka-cluster-sharding"                    % akkaVersion,
+  "com.typesafe.akka" %% "akka-persistence-cassandra"               % "0.103",
+  "com.lightbend.akka.management" %% "akka-management-cluster-http" % "1.0.8",
 
   "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
   "ch.qos.logback" % "logback-classic" % "1.2.3",
@@ -82,7 +81,7 @@ libraryDependencies ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
 
-  ("com.lihaoyi" % "ammonite" % "2.1.4" % "test").cross(CrossVersion.full),
+  ("com.lihaoyi" % "ammonite" % "2.2.0" % "test").cross(CrossVersion.full),
 
   "org.iq80.leveldb" % "leveldb" % "0.7" % "test",
   "org.fusesource.leveldbjni" % "leveldbjni-all" % "1.8" % "test",

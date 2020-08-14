@@ -59,12 +59,10 @@ object Table0 {
  */
 class Table0(waterMark: Int = 8, chipsLimitPerPlayer: Int = 1000) extends Timers with PersistentActor with ActorLogging {
 
+  val flushInterval = 2000.millis
   override val persistenceId = "table-0" //self.path.name
 
-  timers.startPeriodicTimer(persistenceId, Flush, 2000.millis)
-
-  override def receiveCommand: Receive =
-    active(SortedMap[Long, GameTableEvent](), GameTableState(), None, 0)
+  timers.startPeriodicTimer(persistenceId, Flush, flushInterval)
 
   override def receiveRecover: Receive = {
     var map = Map[Long, Int]()
@@ -74,11 +72,14 @@ class Table0(waterMark: Int = 8, chipsLimitPerPlayer: Int = 1000) extends Timers
         val chips = map.getOrElse(ev.playerId, 0)
         map = map + (ev.playerId -> (chips + ev.chips))
       case akka.persistence.RecoveryCompleted ⇒
-        val s = GameTableState(map)
-        log.info("RecoveryCompleted {}", s)
-        context.become(active(SortedMap[Long, GameTableEvent](), s, None, 0))
+        val state = GameTableState(map)
+        log.info("RecoveryCompleted {}", state)
+        context.become(active(SortedMap[Long, GameTableEvent](), state, None, 0))
     }
   }
+
+  override def receiveCommand: Receive =
+    active(SortedMap[Long, GameTableEvent](), GameTableState(), None, 0)
 
   //Invariant: Number of chips per player should not exceed 100
   def update(event: GameTableEvent, state: GameTableState): GameTableState =

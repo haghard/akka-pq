@@ -40,14 +40,31 @@ object Table1 {
   case class JournalWatermark(deliveryId: Long, acceptedEvn: PlaceBetAccepted1) // PlaceBet1
 }
 
+/**
+ *
+ * https://blog.colinbreck.com/maximizing-throughput-for-akka-streams/
+ * https://blog.colinbreck.com/partitioning-akka-streams-to-maximize-throughput/
+ * the corresponding talk https://youtu.be/MzosGtjJdPg
+ *
+ *
+ * https://blog.colinbreck.com/integrating-akka-streams-and-akka-actors-part-i/
+ * https://blog.colinbreck.com/integrating-akka-streams-and-akka-actors-part-ii/
+ * https://blog.colinbreck.com/integrating-akka-streams-and-akka-actors-part-iii/
+ * https://blog.colinbreck.com/integrating-akka-streams-and-akka-actors-part-iv/
+ *
+ * https://blog.colinbreck.com/rethinking-streaming-workloads-with-akka-streams-part-ii/
+ *
+ * https://softwaremill.com/windowing-data-in-akka-streams/
+ *
+ */
+
+//
 //Invariant: Number of chips per player should not exceed 100
 //https://doc.akka.io/docs/akka/current/persistence.html
-class Table1(upstream: ActorRef, limit: Int = 1 << 4, chipsLimitPerPlayer: Int = 100, flushPeriod: FiniteDuration = 1.second)
+class Table1(upstream: ActorRef, watermark: Int = 1 << 4, chipsLimitPerPlayer: Int = 100, flushPeriod: FiniteDuration = 1.second)
   extends PersistentActor with AtLeastOnceDelivery with ActorLogging with Timers {
 
   override val persistenceId = "gt-1" //self.path.name
-
-  override def receiveCommand = active(0, Map.empty, GameTableState1())
 
   //periodic flush
   timers.startPeriodicTimer(persistenceId, Flush1, flushPeriod)
@@ -72,6 +89,8 @@ class Table1(upstream: ActorRef, limit: Int = 1 << 4, chipsLimitPerPlayer: Int =
     }
   }
 
+  override def receiveCommand = active(0, Map.empty, GameTableState1())
+
   def update(event: GameTableEvent1, state: GameTableState1): GameTableState1 =
     event match {
       case e: BetPlaced1 ⇒
@@ -80,7 +99,7 @@ class Table1(upstream: ActorRef, limit: Int = 1 << 4, chipsLimitPerPlayer: Int =
         if (updatedChips < chipsLimitPerPlayer) state.copy(state.userChips.updated(e.playerId, updatedChips))
         else state
       case other ⇒
-        log.error(s"Unknown event ${other}")
+        log.error(s"Unknown event $other")
         state
     }
 
@@ -88,15 +107,15 @@ class Table1(upstream: ActorRef, limit: Int = 1 << 4, chipsLimitPerPlayer: Int =
     case cmd: PlaceBet1 ⇒
       //It will retry sending the message until the delivery is confirmed with confirmDelivery.
       val updated = acceptedEventsNum + 1
-      if (updated <= limit) {
+      if (updated <= watermark) {
         persist(PlaceBetAccepted1(cmd.cmdId, cmd.playerId, cmd.chips)) { accepted ⇒
           deliver(self.path)(deliveryId ⇒ JournalWatermark(deliveryId, accepted))
-          val updatedState = update(BetPlaced1(cmd.cmdId, cmd.playerId, cmd.chips), optState) //
+          val optimisticState = update(BetPlaced1(cmd.cmdId, cmd.playerId, cmd.chips), optState) //
 
           //confirm
           upstream ! BetPlacedReply1(cmd.cmdId, cmd.playerId)
 
-          context become active(acceptedEventsNum, outstandingEvents, updatedState)
+          context become active(acceptedEventsNum, outstandingEvents, optimisticState)
         }
       } else {
         upstream ! BackOff1
@@ -104,6 +123,7 @@ class Table1(upstream: ActorRef, limit: Int = 1 << 4, chipsLimitPerPlayer: Int =
         self ! Flush1
       }
 
+    //
     case JournalWatermark(deliveryId, ev) ⇒
       context become active(
         acceptedEventsNum,
