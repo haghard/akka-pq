@@ -135,7 +135,7 @@ object StatefulProcess {
     //3. `scan` foreach cmd we sequentially run f(state, cmd) => (state, promise)
     //4. `mapAsync(1)` persist state resulted from applying one event
     val f0 = Flow.fromMaterializer { (mat, attr) ⇒
-      val ec   = mat.executionContext
+      val ec = mat.executionContext
       val disp = attr.get[ActorAttributes.Dispatcher].get
       val buf = attr.get[akka.stream.Attributes.InputBuffer].get
       //println("attributes: " + attr.attributeList.mkString(","))
@@ -329,16 +329,14 @@ object StatefulProcess {
     val bs = 1 << 3
 
     implicit val sys: ActorSystem = ActorSystem("streams")
-
     implicit val sch = sys.scheduler
     implicit val ec = sys.dispatcher
 
     val processor =
-      Source.queue[(AddUser, Promise[Reply])](bs, OverflowStrategy.dropNew /*.backpressure*/ )
+      Source
+        .queue[(AddUser, Promise[Reply])](bs, OverflowStrategy.dropNew /*.backpressure*/ )
         .via(statefulBatchedFlow(UserState0(), bs))
-        .to(Sink.foreach {
-          case (reply, p) ⇒ p.trySuccess(reply)
-        })
+        .to(Sink.foreach { case (reply, p) ⇒ p.trySuccess(reply) })
         //.withAttributes(ActorAttributes.supervisionStrategy(akka.stream.Supervision.resumingDecider))
         .addAttributes(ActorAttributes.supervisionStrategy(akka.stream.Supervision.resumingDecider))
         .run()
@@ -351,7 +349,6 @@ object StatefulProcess {
     val bs = 1 << 2 //maxInFlight
 
     implicit val sys: ActorSystem = ActorSystem("streams")
-
     implicit val sch = sys.scheduler
     implicit val ec = sys.dispatcher
 
@@ -360,9 +357,7 @@ object StatefulProcess {
       Source
         .queue[(Cmd, Promise[Reply])](bs, OverflowStrategy.backpressure)
         .via(statefulBatchedFlow1(UserState0(), bs))
-        .toMat(Sink.foreach {
-          case (replies, p) ⇒ p.trySuccess(replies)
-        })(Keep.left)
+        .toMat(Sink.foreach { case (replies, p) ⇒ p.trySuccess(replies) })(Keep.left)
         //.withAttributes(ActorAttributes.supervisionStrategy(akka.stream.Supervision.resumingDecider))
         .addAttributes(ActorAttributes.supervisionStrategy(akka.stream.Supervision.resumingDecider))
         .run()

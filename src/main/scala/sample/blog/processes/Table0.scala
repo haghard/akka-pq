@@ -43,7 +43,7 @@ object Table0 {
 
   case object Flush
 
-  case class GameTableState(userChips: Map[Long, Int] = Map.empty)
+  case class State(userChips: Map[Long, Int] = Map.empty)
 
   object Persisted
 
@@ -51,18 +51,28 @@ object Table0 {
 }
 
 /**
- * The problems we're addressing:
- *  batching requests
- *  scheduling events
- *  flow control
- * They are common problems when dealing with streaming data.
+ *
+ * https://blog.colinbreck.com/maximizing-throughput-for-akka-streams/
+ * https://blog.colinbreck.com/partitioning-akka-streams-to-maximize-throughput/
+ * the corresponding talk https://youtu.be/MzosGtjJdPg
+ *
+ *
+ * https://blog.colinbreck.com/integrating-akka-streams-and-akka-actors-part-i/
+ * https://blog.colinbreck.com/integrating-akka-streams-and-akka-actors-part-ii/
+ * https://blog.colinbreck.com/integrating-akka-streams-and-akka-actors-part-iii/
+ * https://blog.colinbreck.com/integrating-akka-streams-and-akka-actors-part-iv/
+ *
+ * https://blog.colinbreck.com/rethinking-streaming-workloads-with-akka-streams-part-ii/
+ *
+ * https://softwaremill.com/windowing-data-in-akka-streams/
+ *
  */
 class Table0(waterMark: Int = 8, chipsLimitPerPlayer: Int = 1000) extends Timers with PersistentActor with ActorLogging {
 
   val flushInterval = 2000.millis
   override val persistenceId = "table-0" //self.path.name
 
-  timers.startPeriodicTimer(persistenceId, Flush, flushInterval)
+  timers.startTimerAtFixedRate(persistenceId, Flush, flushInterval)
 
   override def receiveRecover: Receive = {
     var map = Map[Long, Int]()
@@ -72,17 +82,17 @@ class Table0(waterMark: Int = 8, chipsLimitPerPlayer: Int = 1000) extends Timers
         val chips = map.getOrElse(ev.playerId, 0)
         map = map + (ev.playerId -> (chips + ev.chips))
       case akka.persistence.RecoveryCompleted ⇒
-        val state = GameTableState(map)
+        val state = State(map)
         log.info("RecoveryCompleted {}", state)
         context.become(active(SortedMap[Long, GameTableEvent](), state, None, 0))
     }
   }
 
   override def receiveCommand: Receive =
-    active(SortedMap[Long, GameTableEvent](), GameTableState(), None, 0)
+    active(SortedMap[Long, GameTableEvent](), State(), None, 0)
 
   //Invariant: Number of chips per player should not exceed 100
-  def update(event: GameTableEvent, state: GameTableState): GameTableState =
+  def update(event: GameTableEvent, state: State): State =
     event match {
       case e: BetPlaced ⇒
         val curChips = state.userChips.getOrElse(e.playerId, 0)
@@ -100,7 +110,7 @@ class Table0(waterMark: Int = 8, chipsLimitPerPlayer: Int = 1000) extends Timers
   }
 
   def active(
-    outstandingEvents: SortedMap[Long, GameTableEvent], optimisticState: GameTableState,
+    outstandingEvents: SortedMap[Long, GameTableEvent], optimisticState: State,
     upstream: Option[ActorRef], bSize: Int
   ): Receive = {
     case cmd: PlaceBet ⇒

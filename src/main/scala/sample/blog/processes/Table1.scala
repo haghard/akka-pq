@@ -67,7 +67,7 @@ class Table1(upstream: ActorRef, watermark: Int = 1 << 4, chipsLimitPerPlayer: I
   override val persistenceId = "gt-1" //self.path.name
 
   //periodic flush
-  timers.startPeriodicTimer(persistenceId, Flush1, flushPeriod)
+  timers.startTimerAtFixedRate(persistenceId, Flush1, flushPeriod)
 
   // During recovery, only messages with an un-confirmed delivery id will be resent.
   // We only send JournalWatermark if at the end of receiveRecover we haven't seen JournalWatermark(id) confirmed
