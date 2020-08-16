@@ -5,7 +5,7 @@ import java.util.concurrent.ThreadLocalRandom
 import akka.actor.{ ActorSystem, Scheduler }
 import akka.stream.QueueOfferResult.{ Dropped, Enqueued }
 import akka.stream.scaladsl.{ Flow, FlowWithContext, Keep, Sink, Source, SourceQueueWithComplete }
-import akka.stream.{ ActorAttributes, ActorMaterializer, Attributes, Materializer, OverflowStrategy, QueueOfferResult }
+import akka.stream.{ ActorAttributes, Attributes, OverflowStrategy, QueueOfferResult }
 import sample.blog.processes.{ EventBuffer, ExpiringPromise }
 
 import scala.collection.immutable
@@ -13,7 +13,26 @@ import scala.concurrent.duration._
 import scala.concurrent.{ Await, ExecutionContext, Future, Promise }
 
 //runMain sample.blog.eg.StatefulProcess
-//https://blog.softwaremill.com/painlessly-passing-message-context-through-akka-streams-1615b11efc2c
+
+/**
+ *
+ * https://blog.softwaremill.com/painlessly-passing-message-context-through-akka-streams-1615b11efc2c
+ *
+ * https://blog.colinbreck.com/maximizing-throughput-for-akka-streams/
+ * https://blog.colinbreck.com/partitioning-akka-streams-to-maximize-throughput/
+ * the corresponding talk https://youtu.be/MzosGtjJdPg
+ *
+ *
+ * https://blog.colinbreck.com/integrating-akka-streams-and-akka-actors-part-i/
+ * https://blog.colinbreck.com/integrating-akka-streams-and-akka-actors-part-ii/
+ * https://blog.colinbreck.com/integrating-akka-streams-and-akka-actors-part-iii/
+ * https://blog.colinbreck.com/integrating-akka-streams-and-akka-actors-part-iv/
+ *
+ * https://blog.colinbreck.com/rethinking-streaming-workloads-with-akka-streams-part-ii/
+ *
+ * https://softwaremill.com/windowing-data-in-akka-streams/
+ *
+ */
 object StatefulProcess {
 
   case class ProcessorUnavailable(name: String)
@@ -127,14 +146,25 @@ object StatefulProcess {
     FlowWithContext.fromTuples(f)
   }
 
-  def statefulBatchedFlow2(
+  def statefulFlow(
     userState: UserState0, bs: Int
   )(implicit ec: ExecutionContext): FlowWithContext[Cmd, Promise[Reply], Reply, Promise[Reply], Any] = {
-    //1. `mapAsync` fan-out stage which reserves order as received from upstream
-    //2. `batch` collect enriched commands in a buffer
-    //3. `scan` foreach cmd we sequentially run f(state, cmd) => (state, promise)
-    //4. `mapAsync(1)` persist state resulted from applying one event
-    val f0 = Flow.fromMaterializer { (mat, attr) ⇒
+
+    def applyCmd(cmd: Cmd, state: UserState0): UserState0 = {
+      cmd match {
+        case AddUser(seqNum, id) ⇒
+          if (state.nextSeqNum == seqNum) state.copy(state.users + id, state.nextSeqNum + 1)
+          else state //println(state.nextSeqNum + ":" + seqNum + " duplicate")
+        case RmUser(seqNum, id) ⇒
+          if (state.nextSeqNum == seqNum) state.copy(state.users - id, state.nextSeqNum + 1)
+          else state //println(state.nextSeqNum + ":" + seqNum + " duplicate")
+      }
+    }
+
+    //1. `mapAsync` fan-out stage that introduces asynchrony
+    //2. `scan` foreach cmd we sequentially apply f(state, cmd) => (state, promise)
+    //3. `mapAsync(1)` persist state resulted from applying one event
+    val f = Flow.fromMaterializer { (mat, attr) ⇒
       val ec = mat.executionContext
       val disp = attr.get[ActorAttributes.Dispatcher].get
       val buf = attr.get[akka.stream.Attributes.InputBuffer].get
@@ -147,7 +177,7 @@ object StatefulProcess {
         .mapAsync(bs) { cmd ⇒
           Future {
             //enrich commands
-            Thread.sleep(ThreadLocalRandom.current.nextInt(20, 50))
+            Thread.sleep(ThreadLocalRandom.current.nextInt(20, 150))
             cmd
           }(ec)
         }
@@ -161,22 +191,8 @@ object StatefulProcess {
             val cmd = elem._1
             val p = elem._2
             val state = stateWithPromise._1
-
-            cmd match {
-              case AddUser(seqNum, id) ⇒
-                if (state.nextSeqNum == seqNum) {
-                  (state.copy(state.users + id, state.nextSeqNum + 1), p)
-                } else {
-                  println(state.nextSeqNum + ":" + seqNum + " duplicate")
-                  (state, p)
-                }
-              case RmUser(seqNum, id) ⇒
-                if (state.nextSeqNum == seqNum) (state.copy(state.users - id, state.nextSeqNum + 1), p)
-                else {
-                  println(state.nextSeqNum + ":" + seqNum + " duplicate")
-                  (state, p)
-                }
-            }
+            val updatedState = applyCmd(cmd, state)
+            (updatedState, p)
         }
         .mapAsync(1) { stateWithPromise ⇒
           Future {
@@ -185,12 +201,12 @@ object StatefulProcess {
             val state = stateWithPromise._1
             val p = stateWithPromise._2
 
-            println(s"Persist seqNum: ${state.nextSeqNum}")
+            println(s"Persist ${state.nextSeqNum}")
             (Added(state.nextSeqNum), p)
           }(ec)
         }
     }
-    FlowWithContext.fromTuples(f0)
+    FlowWithContext.fromTuples(f)
   }
 
   def statefulBatchedFlow1(
@@ -328,7 +344,7 @@ object StatefulProcess {
     println("********************************************")
     val bs = 1 << 3
 
-    implicit val sys: ActorSystem = ActorSystem("streams")
+    implicit val sys: ActorSystem = ActorSystem("stateful-streams")
     implicit val sch = sys.scheduler
     implicit val ec = sys.dispatcher
 
@@ -345,24 +361,45 @@ object StatefulProcess {
     Await.result(f, Duration.Inf)
   }
 
-  def main(args: Array[String]): Unit = {
+  //confirms in batches
+  def main1(args: Array[String]): Unit = {
     val bs = 1 << 2 //maxInFlight
 
-    implicit val sys: ActorSystem = ActorSystem("streams")
+    implicit val sys: ActorSystem = ActorSystem("stateful-streams")
     implicit val sch = sys.scheduler
     implicit val ec = sys.dispatcher
 
     //long running stateful stream
-    val processor =
+    val queue =
       Source
         .queue[(Cmd, Promise[Reply])](bs, OverflowStrategy.backpressure)
         .via(statefulBatchedFlow1(UserState0(), bs))
+        .toMat(Sink.foreach { case (replies, p) ⇒ p.trySuccess(replies) })(Keep.left)
+        .addAttributes(ActorAttributes.supervisionStrategy(akka.stream.Supervision.resumingDecider))
+        .run()
+
+    val f = produce(1L, bs, queue).flatMap(_ ⇒ sys.terminate)
+    Await.result(f, Duration.Inf)
+  }
+
+  //confirms one by one
+  def main(args: Array[String]): Unit = {
+    val bs = 1 << 2
+
+    implicit val sys: ActorSystem = ActorSystem("stateful-streams")
+    implicit val sch = sys.scheduler
+    implicit val ec = sys.dispatcher
+
+    val queue =
+      Source
+        .queue[(Cmd, Promise[Reply])](bs, OverflowStrategy.dropNew)
+        .via(statefulFlow(UserState0(), bs))
         .toMat(Sink.foreach { case (replies, p) ⇒ p.trySuccess(replies) })(Keep.left)
         //.withAttributes(ActorAttributes.supervisionStrategy(akka.stream.Supervision.resumingDecider))
         .addAttributes(ActorAttributes.supervisionStrategy(akka.stream.Supervision.resumingDecider))
         .run()
 
-    val f = produce(1L, bs, processor).flatMap(_ ⇒ sys.terminate)
+    val f = produceOne(1L, queue).flatMap(_ ⇒ sys.terminate)
     Await.result(f, Duration.Inf)
   }
 
@@ -433,6 +470,31 @@ object StatefulProcess {
         //Future.failed(ProcessorUnavailable("Unavailable"))
         case other ⇒
           println(s"Failed: $n")
+          Future.failed(ProcessorError(other))
+      }
+  }
+
+  def produceOne(seqNum: Long, queue: SourceQueueWithComplete[(Cmd, Promise[Reply])])(implicit ec: ExecutionContext, sch: Scheduler): Future[Long] = {
+    val maxLatency = 400.millis
+    val p = ExpiringPromise[Reply](maxLatency)
+    queue
+      .offer(AddUser(seqNum) -> p)
+      .flatMap {
+        case Enqueued ⇒
+          p.future
+            .flatMap(reply ⇒ produceOne(seqNum + 1, queue))
+            .recoverWith {
+              case err: Throwable ⇒
+                //retry the last send command, therefore deduplication is required.
+                val retryEvent = seqNum - 1
+                println(s"Error: ${err.getMessage}. Retry event: $retryEvent")
+                akka.pattern.after(maxLatency, sch)(produceOne(seqNum - 1, queue))
+            }
+        case Dropped ⇒
+          println(s"Dropped: $seqNum")
+          akka.pattern.after(maxLatency, sch)(produceOne(seqNum, queue))
+        case other ⇒
+          println(s"Failed: $seqNum")
           Future.failed(ProcessorError(other))
       }
   }
