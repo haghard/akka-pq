@@ -2,10 +2,11 @@ package sample.blog.eg
 
 import java.util.concurrent.ThreadLocalRandom
 
+import akka.Done
 import akka.actor.{ ActorSystem, Scheduler }
 import akka.stream.QueueOfferResult.{ Dropped, Enqueued }
 import akka.stream.scaladsl.{ Flow, FlowWithContext, Keep, Sink, Source, SourceQueueWithComplete }
-import akka.stream.{ ActorAttributes, Attributes, OverflowStrategy, QueueOfferResult }
+import akka.stream.{ ActorAttributes, Attributes, OverflowStrategy, QueueOfferResult, ThrottleMode }
 import sample.blog.processes.{ EventBuffer, ExpiringPromise }
 
 import scala.collection.immutable
@@ -59,7 +60,7 @@ object StatefulProcess {
 
   final case class Removed(seqNum: Long) extends Reply
 
-  final case class UserState(users: Set[Long] = Set.empty, current: Long = -1L /*, p: Promise[Seq[Reply]] = null*/ )
+  final case class UserState(users: Set[Long] = Set.empty, current: Long = -1L)
 
   final case class UserState0(users: Set[Long] = Set.empty, nextSeqNum: Long = 1L)
 
@@ -399,7 +400,8 @@ object StatefulProcess {
         .addAttributes(ActorAttributes.supervisionStrategy(akka.stream.Supervision.resumingDecider))
         .run()
 
-    val f = produceOne(1L, queue).flatMap(_ ⇒ sys.terminate)
+    val f = produceOneWithinStream(queue).flatMap(_ ⇒ sys.terminate)
+    //val f = produceOne(1L, queue).flatMap(_ ⇒ sys.terminate)
     Await.result(f, Duration.Inf)
   }
 
@@ -474,9 +476,45 @@ object StatefulProcess {
       }
   }
 
+  def produceOneWithinStream(queue: SourceQueueWithComplete[(Cmd, Promise[Reply])])(implicit sys: ActorSystem): Future[Done] = {
+    val maxLatency = 400.millis
+
+    def submit(cmd: Cmd, queue: SourceQueueWithComplete[(Cmd, Promise[Reply])]): Future[Reply] = {
+      implicit val ec = sys.dispatcher
+      implicit val sch = sys.scheduler
+      val p = ExpiringPromise[Reply](maxLatency)
+      queue
+        .offer(cmd -> p)
+        .flatMap {
+          case Enqueued ⇒
+            p.future
+              .recoverWith {
+                case err: Throwable ⇒
+                  //retry the last send command, therefore deduplication is required.
+                  val retryEvent = cmd.seqNum - 1
+                  println(s"Error: ${err.getMessage}. Retry event: $retryEvent")
+                  akka.pattern.after(maxLatency, sys.scheduler)(submit(cmd, queue))
+              }
+          case Dropped ⇒
+            println(s"Dropped: ${cmd.seqNum}")
+            akka.pattern.after(maxLatency, sys.scheduler)(submit(cmd, queue))
+          case other ⇒
+            println(s"Failed: ${cmd.seqNum}")
+            Future.failed(ProcessorError(other))
+        }
+    }
+
+    Source
+      .fromIterator(() ⇒ Iterator.from(1).map(seqNum ⇒ AddUser(seqNum.toLong)))
+      .throttle(10, maxLatency) //10 per maxLatency
+      .mapAsync(1)(cmd ⇒ submit(cmd, queue))
+      .run()
+  }
+
   def produceOne(seqNum: Long, queue: SourceQueueWithComplete[(Cmd, Promise[Reply])])(implicit ec: ExecutionContext, sch: Scheduler): Future[Long] = {
     val maxLatency = 400.millis
     val p = ExpiringPromise[Reply](maxLatency)
+
     queue
       .offer(AddUser(seqNum) -> p)
       .flatMap {
