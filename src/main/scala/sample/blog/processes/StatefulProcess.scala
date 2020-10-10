@@ -447,7 +447,7 @@ object StatefulProcess {
     val confirmationTimeout = 600.millis //delivery of batch should be confirmed withing this timeout
     //What we're saying here is that within this timeout we are able to handle batch of messages. Basically we confirm in batches
 
-    //The flow control is driven by the consumer side, which means that the producer will not send faster than consumer can confirm the batches
+    //The flow control is driven by the consumer side, which means that the producer will not send faster than consumer can confirm
     val p = ExpiringPromise[Reply](confirmationTimeout)
     queue.offer(AddUser(n) -> p)
       .flatMap {

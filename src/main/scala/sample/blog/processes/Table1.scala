@@ -25,7 +25,7 @@ object Table1 {
 
   case class BetPlaced1(cmdId: Long, playerId: Long, chips: Int, deliveryId: Option[Long] = None) extends GameTableEvent1
 
-  case class PlaceBetAccepted1(cmdId: Long, playerId: Long, chips: Int) extends GameTableEvent1
+  case class BetAccepted(cmdId: Long, playerId: Long, chips: Int) extends GameTableEvent1
 
   sealed trait GameTableReply1
 
@@ -37,7 +37,7 @@ object Table1 {
 
   case class GameTableState1(userChips: Map[Long, Int] = Map.empty)
 
-  case class JournalWatermark(deliveryId: Long, acceptedEvn: PlaceBetAccepted1) // PlaceBet1
+  case class JournalWatermark(deliveryId: Long, acceptedEvn: BetAccepted) // PlaceBet1
 }
 
 /**
@@ -75,7 +75,7 @@ class Table1(upstream: ActorRef, watermark: Int = 1 << 4, chipsLimitPerPlayer: I
     var map = Map.empty[Long, Int]
 
     {
-      case ev: PlaceBetAccepted1 ⇒
+      case ev: BetAccepted ⇒
         //akka can cheat and not send JournalWatermark unless it hasn't been confirmed
         deliver(self.path)(JournalWatermark(_, ev))
       case _: JournalWatermark ⇒
@@ -108,7 +108,7 @@ class Table1(upstream: ActorRef, watermark: Int = 1 << 4, chipsLimitPerPlayer: I
       //It will retry sending the message until the delivery is confirmed with confirmDelivery.
       val updated = acceptedEventsNum + 1
       if (updated <= watermark) {
-        persist(PlaceBetAccepted1(cmd.cmdId, cmd.playerId, cmd.chips)) { accepted ⇒
+        persist(BetAccepted(cmd.cmdId, cmd.playerId, cmd.chips)) { accepted ⇒
           deliver(self.path)(deliveryId ⇒ JournalWatermark(deliveryId, accepted))
           val optimisticState = update(BetPlaced1(cmd.cmdId, cmd.playerId, cmd.chips), optState) //
 
