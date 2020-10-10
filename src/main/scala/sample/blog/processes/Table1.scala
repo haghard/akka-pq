@@ -61,6 +61,8 @@ object Table1 {
 //
 //Invariant: Number of chips per player should not exceed 100
 //https://doc.akka.io/docs/akka/current/persistence.html
+
+//Monolith to reactive microservices: https://www.youtube.com/watch?v=pCG2Yhe3H6g
 class Table1(upstream: ActorRef, watermark: Int = 1 << 4, chipsLimitPerPlayer: Int = 100, flushPeriod: FiniteDuration = 1.second)
   extends PersistentActor with AtLeastOnceDelivery with ActorLogging with Timers {
 
@@ -119,12 +121,12 @@ class Table1(upstream: ActorRef, watermark: Int = 1 << 4, chipsLimitPerPlayer: I
         }
       } else {
         upstream ! BackOff1
-        // trigger persistAllAsync
         self ! Flush1
       }
 
     //
     case JournalWatermark(deliveryId, ev) ⇒
+      //Some processing should go here
       context become active(
         acceptedEventsNum,
         outstandingEvents + (deliveryId -> BetPlaced1(ev.cmdId, ev.playerId, ev.chips, Some(deliveryId))),
