@@ -29,21 +29,21 @@ object Table0 {
     def playerId: Long
   }
 
-  case class PlaceBet(cmdId: Long, playerId: Long, chips: Int) extends GameTableCmd
+  final case class PlaceBet(cmdId: Long, playerId: Long, chips: Int) extends GameTableCmd
 
   sealed trait GameTableEvent
 
-  case class BetPlaced(cmdId: Long, playerId: Long, chips: Int) extends GameTableEvent
+  final case class BetPlaced(cmdId: Long, playerId: Long, chips: Int) extends GameTableEvent
 
   sealed trait GameTableReply
 
-  case class BackOff(cmd: PlaceBet) extends GameTableReply
+  final case class BackOff(cmd: PlaceBet) extends GameTableReply
 
-  case class BetPlacedReply(cmdId: Long, playerId: Long)
+  final case class BetPlacedReply(cmdId: Long, playerId: Long)
 
   case object Flush
 
-  case class State(userChips: Map[Long, Int] = Map.empty)
+  final case class State(userChips: Map[Long, Int] = Map.empty)
 
   object Persisted
 
@@ -69,7 +69,8 @@ object Table0 {
  */
 class Table0(waterMark: Int = 8, chipsLimitPerPlayer: Int = 1000) extends Timers with PersistentActor with ActorLogging {
 
-  val flushInterval = 2000.millis
+  private val flushInterval = 2000.millis
+
   override val persistenceId = "table-0" //self.path.name
 
   timers.startTimerAtFixedRate(persistenceId, Flush, flushInterval)
@@ -151,7 +152,7 @@ class Table0(waterMark: Int = 8, chipsLimitPerPlayer: Int = 1000) extends Timers
       }*/
     case Flush if outstandingEvents.nonEmpty ⇒
       val bSize = outstandingEvents.keySet.size
-      log.info("persist batch [{}]", outstandingEvents.keySet.mkString(","))
+      log.info("Start persisting batch [{}]", outstandingEvents.keySet.mkString(","))
 
       /*
       val env = Envelope(outstandingEvents)
