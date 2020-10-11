@@ -1,7 +1,7 @@
 package sample.blog
 
 import akka.actor.SupervisorStrategy.Decider
-import akka.actor.{Actor, ActorInitializationException, ActorLogging, ActorRef, ActorSystem, AllForOneStrategy, Props, SupervisorStrategy, Terminated, Timers}
+import akka.actor.{ Actor, ActorInitializationException, ActorLogging, ActorRef, ActorSystem, AllForOneStrategy, Props, SupervisorStrategy, Terminated, Timers }
 import com.typesafe.config.ConfigFactory
 
 import scala.concurrent.Future
@@ -48,13 +48,12 @@ class Parent extends Actor with ActorLogging {
 object Child {
 
   final case class ChildInitializationError(
-    actor: ActorRef,
-    message: String,
-    cause: Throwable
+      actor: ActorRef,
+      message: String,
+      cause: Throwable
   ) extends ActorInitializationException(actor, message, cause) with NoStackTrace
-  
-}
 
+}
 
 class Child extends Actor with ActorLogging with Timers {
   implicit val ec = context.dispatcher

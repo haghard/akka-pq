@@ -1,6 +1,7 @@
 package sample.blog
 
 import java.lang.{ Long ⇒ JLong }
+import java.util.concurrent.Executor
 
 import akka.event.LoggingAdapter
 import akka.persistence.cassandra._
@@ -8,9 +9,11 @@ import akka.stream._
 import akka.stream.scaladsl.{ Keep, Source }
 import akka.stream.stage._
 import com.datastax.driver.core._
+import com.google.common.util.concurrent.{ FutureCallback, ListenableFuture }
+import sample.blog.PsJournal.{ ListenableFutureConverter, ResultSetFutureConverter }
 
 import scala.annotation.tailrec
-import scala.concurrent.{ Future, Promise }
+import scala.concurrent.{ ExecutionContext, Future, Promise }
 import scala.reflect.ClassTag
 import scala.util.{ Failure, Success, Try }
 
@@ -110,7 +113,7 @@ final class PsJournal(client: Cluster, keySpace: String, journal: String, persis
         onMessageCallback = getAsyncCallback[Try[ResultSet]](onFetchCompleted)
         val partition = navigatePartition(sequenceNr, partitionSize): JLong
         val stmt = statement(preparedStmt, persistenceId, partition, sequenceNr, pageSize)
-        session.executeAsync(stmt).asScala.onComplete(onMessageCallback.invoke)
+        session.executeAsync(stmt).asFuture.onComplete(onMessageCallback.invoke)
       }
 
       setHandler(out, new OutHandler {
@@ -124,12 +127,12 @@ final class PsJournal(client: Cluster, keySpace: String, journal: String, persis
                 //a current partition is exhausted, let's try to read from the next partition
                 val nextPartition = navigatePartition(sequenceNr, partitionSize): JLong
                 val stmt = statement(preparedStmt, persistenceId, nextPartition, sequenceNr, pageSize)
-                session.executeAsync(stmt).asScala.onComplete(onMessageCallback.invoke)
+                session.executeAsync(stmt).asFuture.onComplete(onMessageCallback.invoke)
               } else {
                 //Your page size less than akka-cassandra-persistence partition size(cassandra-journal.target-partition-size)
                 //so you hit the end of page but still have something to read
                 log.info("Still have something to read in current partition seqNum: {}", sequenceNr)
-                iter.fetchMoreResults.asScala.onComplete(onMessageCallback.invoke)
+                iter.fetchMoreResults.asFuture.onComplete(onMessageCallback.invoke)
               }
             case None ⇒
               //log.info("A request from a downstream had arrived before we read the first row")
@@ -167,6 +170,43 @@ final class PsJournal(client: Cluster, keySpace: String, journal: String, persis
 }
 
 object PsJournal {
+
+  implicit class ListenableFutureConverter[A](val lf: ListenableFuture[A]) extends AnyVal {
+    def asFuture(implicit ec: ExecutionContext): Future[A] = {
+      val promise = Promise[A]
+      //lf.addListener(() => promise.complete(Try(lf.get())), ec.asInstanceOf[Executor])
+      com.google.common.util.concurrent.Futures.addCallback(lf, new FutureCallback[A] {
+        def onFailure(error: Throwable): Unit = {
+          promise.failure(error)
+          ()
+        }
+
+        def onSuccess(result: A): Unit = {
+          promise.success(result)
+          ()
+        }
+      }, ec.asInstanceOf[Executor])
+      promise.future
+    }
+  }
+
+  implicit class ResultSetFutureConverter(val lf: ResultSetFuture) extends AnyVal {
+    def asFuture(implicit ec: ExecutionContext): Future[ResultSet] = {
+      val promise = Promise[ResultSet]()
+      com.google.common.util.concurrent.Futures.addCallback(lf, new FutureCallback[ResultSet] {
+        def onFailure(error: Throwable): Unit = {
+          promise.failure(error)
+          ()
+        }
+
+        def onSuccess(result: ResultSet): Unit = {
+          promise.success(result)
+          ()
+        }
+      }, ec.asInstanceOf[Executor])
+      promise.future
+    }
+  }
 
   def apply[T: Codec: ClassTag](client: Cluster, keySpace: String, journal: String, persistenceId: String,
     offset: Long, partitionSize: Long, pageSize: Int = 32) = {

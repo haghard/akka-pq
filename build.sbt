@@ -47,7 +47,8 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-cluster"                             % akkaVersion,
   "com.typesafe.akka" %% "akka-cluster-tools"                       % akkaVersion,
   "com.typesafe.akka" %% "akka-cluster-sharding"                    % akkaVersion,
-  "com.typesafe.akka" %% "akka-persistence-cassandra"               % "0.103",
+  "com.typesafe.akka" %% "akka-persistence-query"                   % akkaVersion,
+  "com.typesafe.akka" %% "akka-persistence-cassandra"               % "0.103",      //"1.0.3"
 
   "com.lightbend.akka.management" %% "akka-management-cluster-http" % "1.0.8",
 
@@ -66,8 +67,8 @@ libraryDependencies ++= Seq(
   //"org.hdrhistogram"  %   "HdrHistogram"      % "2.1.9",
   "com.chuusai" %% "shapeless" % "2.3.3",
 
-  "org.typelevel" %% "cats-core" % "2.1.0",
-  "org.typelevel" %% "cats-effect" % "2.1.0",
+  "org.typelevel" %% "cats-core" % "2.2.0",
+  "org.typelevel" %% "cats-effect" % "2.2.0",
 
   "com.typesafe.akka" %% "akka-multi-node-testkit" % akkaVersion,
   //"net.cakesolutions" %%  "validated-config"  %  "1.1.2",
@@ -106,6 +107,7 @@ scalariformAutoformat := true
 scalariformWithBaseDirectory := true
 
 addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3")
+
 
 /*
 

@@ -19,19 +19,19 @@ class TableWriter(gt: ActorRef) extends Actor with ActorLogging {
 
   override def receive: Receive = active(0L, null)
 
-  def active(seqNum: Long, c: Cancellable): Receive = {
+  def active(cmdId: Long, c: Cancellable): Receive = {
     case _: Long ⇒
-      gt ! sample.blog.processes.Table0.PlaceBet(seqNum, ThreadLocalRandom.current().nextLong(10L, 15L), 1)
-      val next = seqNum + 1L
-      val c = scheduler.scheduleOnce(50.millis)(self ! next)
+      gt ! sample.blog.processes.Table0.PlaceBet(cmdId, ThreadLocalRandom.current().nextLong(1L, 150L), 1)
+      val next = cmdId + 1L
+      val c = scheduler.scheduleOnce(35.millis)(self ! next)
       context.become(active(next, c))
 
     case sample.blog.processes.Table0.BackOff(cmd) ⇒
       c.cancel()
       //log.warning("BackOff !!! Suspend: {}", seqNum)
-      val c0 = scheduler.scheduleOnce(200.millis)(self ! cmd.cmdId)
+      val c0 = scheduler.scheduleOnce(150.millis)(self ! cmd.cmdId)
       context.become(active(cmd.cmdId, c0))
-    case r: sample.blog.processes.Table0.BetPlacedReply ⇒
+    case _: sample.blog.processes.Table0.BetPlacedReply ⇒
     //log.warning("Reply:  {}", r.cmdId)
   }
 

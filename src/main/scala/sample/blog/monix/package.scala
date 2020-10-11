@@ -1,11 +1,9 @@
 package sample.blog
 
-import com.google.common.util.concurrent.{ FutureCallback, Futures, ListenableFuture }
-
 import scala.concurrent.{ Future, Promise }
 import scala.language.implicitConversions
 import com.datastax.driver.core.{ PreparedStatement, Session, SimpleStatement }
-
+import com.google.common.util.concurrent.{ FutureCallback, Futures, ListenableFuture }
 package object monix {
 
   import scala.concurrent.{ ExecutionContext, ExecutionContextExecutorService }
@@ -14,6 +12,7 @@ package object monix {
 
   //https://gist.github.com/viktorklang/5245161
   object ExecutionContextExecutorServiceBridge {
+
     def apply(ec: ExecutionContext): ExecutionContextExecutorService = ec match {
       case null                                  ⇒ throw null
       case eces: ExecutionContextExecutorService ⇒ eces
@@ -32,7 +31,7 @@ package object monix {
 
   implicit def asScalaFuture[T](lf: ListenableFuture[T])(implicit ec: ExecutionContext): Future[T] = {
     val promise = Promise[T]()
-    Futures.addCallback(lf, new FutureCallback[T] {
+    com.google.common.util.concurrent.Futures.addCallback(lf, new FutureCallback[T] {
       def onFailure(error: Throwable): Unit = {
         promise.failure(error)
         ()

@@ -3,7 +3,6 @@ package sample.blog
 import java.net.InetSocketAddress
 import java.util.UUID
 import akka.actor.{ Actor, ActorRef, ActorSystem, OneForOneStrategy, Props }
-import akka.persistence.cassandra.CassandraMetricsRegistry
 import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
 import akka.persistence.query.PersistenceQuery
 import akka.stream.scaladsl.{ Keep, Sink }

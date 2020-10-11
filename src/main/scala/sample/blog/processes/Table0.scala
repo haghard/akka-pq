@@ -39,13 +39,13 @@ object Table0 {
 
   final case class BackOff(cmd: PlaceBet) extends GameTableReply
 
-  final case class BetPlacedReply(cmdId: Long, playerId: Long)
+  final case class BetPlacedReply(cmdId: Long /*, playerId: Long*/ )
 
   case object Flush
 
   final case class State(userChips: Map[Long, Int] = Map.empty)
 
-  object Persisted
+  final case class Persisted(cmdId: Long)
 
   def props = Props(new Table0())
 }
@@ -67,7 +67,7 @@ object Table0 {
  * https://softwaremill.com/windowing-data-in-akka-streams/
  *
  */
-class Table0(waterMark: Int = 8, chipsLimitPerPlayer: Int = 1000) extends Timers with PersistentActor with ActorLogging {
+class Table0(waterMark: Int = 8, chipsLimitPerPlayer: Int = 50000) extends Timers with PersistentActor with ActorLogging {
 
   private val flushInterval = 2000.millis
 
@@ -85,12 +85,12 @@ class Table0(waterMark: Int = 8, chipsLimitPerPlayer: Int = 1000) extends Timers
       case akka.persistence.RecoveryCompleted ⇒
         val state = State(map)
         log.info("RecoveryCompleted {}", state)
-        context.become(active(SortedMap[Long, GameTableEvent](), state, None, 0))
+        context.become(active(SortedMap[Long, GameTableEvent](), state, None, Set.empty[Long]))
     }
   }
 
   override def receiveCommand: Receive =
-    active(SortedMap[Long, GameTableEvent](), State(), None, 0)
+    active(SortedMap[Long, GameTableEvent](), State(), None, Set.empty[Long])
 
   //Invariant: Number of chips per player should not exceed 100
   def update(event: GameTableEvent, state: State): State =
@@ -105,14 +105,15 @@ class Table0(waterMark: Int = 8, chipsLimitPerPlayer: Int = 1000) extends Timers
         state
     }
 
-  def tryFlush(bSize: Int): Unit = {
-    if (bSize == 0)
+  //we flush only when current persistInFlight buffer is empty
+  def tryFlush(persistInFlight: Int): Unit = {
+    if (persistInFlight == 0)
       self ! Flush
   }
 
   def active(
     outstandingEvents: SortedMap[Long, GameTableEvent], optimisticState: State,
-    upstream: Option[ActorRef], bSize: Int
+    upstream: Option[ActorRef], persistInFlight: Set[Long]
   ): Receive = {
     case cmd: PlaceBet ⇒
       if (outstandingEvents.keySet.size <= waterMark) {
@@ -121,12 +122,11 @@ class Table0(waterMark: Int = 8, chipsLimitPerPlayer: Int = 1000) extends Timers
         //optimistically update state before persisting events
         val updatedState = update(ev, optimisticState)
         val outstandingEventsUpdated = outstandingEvents + (ev.cmdId -> ev)
-        context become active(outstandingEventsUpdated, updatedState, Some(sender()), bSize)
+        context become active(outstandingEventsUpdated, updatedState, Some(sender()), persistInFlight)
       } else {
-        //We hope that by the time we fill up current batch the prev one has already been persisted.
         upstream.foreach(_ ! BackOff(cmd))
-        log.warning("BackOff - buffer size: {}: outstanding p-batch:{}. Last cmd id:{}", outstandingEvents.keySet.size, bSize, cmd.cmdId)
-        tryFlush(bSize)
+        log.warning("BackOff cmd:{}  buffers[{}] - [{}]", cmd.cmdId, outstandingEvents.keySet.mkString(","), persistInFlight.mkString(","))
+        tryFlush(persistInFlight.size)
       }
 
     /*
@@ -151,32 +151,22 @@ class Table0(waterMark: Int = 8, chipsLimitPerPlayer: Int = 1000) extends Timers
         context become active(outstandingEventsUpdated, updatedState, upstream, bSize)
       }*/
     case Flush if outstandingEvents.nonEmpty ⇒
-      val bSize = outstandingEvents.keySet.size
       log.info("Start persisting batch [{}]", outstandingEvents.keySet.mkString(","))
-
-      /*
-      val env = Envelope(outstandingEvents)
-      //confirm in batches
-      persistAsync(env) { e =>
-        ???
-      }
-      */
       persistAllAsync(outstandingEvents.values.toSeq) { e ⇒
         e match {
           //calls for each persisted event
           case e: BetPlaced ⇒
             // Who knows how long to sleep ¯\_(ツ)_/¯?
-            Thread.sleep(41)
-            //TODO: send to self and remove from buffer
-            upstream.foreach(_ ! BetPlacedReply(e.cmdId, e.playerId))
-            self ! Persisted
+            Thread.sleep(70)
+            self ! Persisted(e.cmdId)
         }
       }
-      context.become(active(SortedMap[Long, GameTableEvent](), optimisticState, upstream, bSize))
+      context.become(active(SortedMap[Long, GameTableEvent](), optimisticState, upstream, outstandingEvents.keySet))
 
-    case Persisted ⇒
-      val bSize0 = bSize - 1
-      tryFlush(bSize0)
-      context.become(active(outstandingEvents, optimisticState, upstream, bSize0))
+    case Persisted(cmdId) ⇒
+      val inFlight = persistInFlight - cmdId
+      //upstream.foreach(_ ! BetPlacedReply(cmdId))
+      tryFlush(inFlight.size)
+      context.become(active(outstandingEvents, optimisticState, upstream, inFlight))
   }
 }

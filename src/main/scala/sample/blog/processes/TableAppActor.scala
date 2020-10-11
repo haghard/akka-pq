@@ -15,7 +15,7 @@ class TableAppActor extends Actor with ActorLogging {
   override val supervisorStrategy = OneForOneStrategy(maxNrOfRetries  = 10, withinTimeRange = 15.seconds) {
     case _: ActorKilledException ⇒
       SupervisorStrategy.Restart
-    case ex: Exception ⇒
+    case _: Exception ⇒
       SupervisorStrategy.Restart
     case other ⇒
       log.error(other, "Unexpected other: ")

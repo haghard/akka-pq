@@ -354,8 +354,8 @@ object StatefulProcess {
         .queue[(AddUser, Promise[Reply])](bs, OverflowStrategy.dropNew /*.backpressure*/ )
         .via(statefulBatchedFlow(UserState0(), bs))
         .to(Sink.foreach { case (reply, p) ⇒ p.trySuccess(reply) })
-        //.withAttributes(ActorAttributes.supervisionStrategy(akka.stream.Supervision.resumingDecider))
-        .addAttributes(ActorAttributes.supervisionStrategy(akka.stream.Supervision.resumingDecider))
+        .withAttributes(ActorAttributes.supervisionStrategy(akka.stream.Supervision.resumingDecider))
+        //.addAttributes(ActorAttributes.supervisionStrategy(akka.stream.Supervision.resumingDecider))
         .run()
 
     val f = produce0(1L, bs, processor).flatMap(_ ⇒ sys.terminate)
@@ -376,7 +376,8 @@ object StatefulProcess {
         .queue[(Cmd, Promise[Reply])](bs, OverflowStrategy.backpressure)
         .via(statefulBatchedFlow1(UserState0(), bs))
         .toMat(Sink.foreach { case (replies, p) ⇒ p.trySuccess(replies) })(Keep.left)
-        .addAttributes(ActorAttributes.supervisionStrategy(akka.stream.Supervision.resumingDecider))
+        .withAttributes(ActorAttributes.supervisionStrategy(akka.stream.Supervision.resumingDecider))
+        //.addAttributes(ActorAttributes.supervisionStrategy(akka.stream.Supervision.resumingDecider))
         .run()
 
     val f = produce(1L, bs, queue).flatMap(_ ⇒ sys.terminate)
@@ -396,8 +397,8 @@ object StatefulProcess {
         .queue[(Cmd, Promise[Reply])](bs, OverflowStrategy.dropNew)
         .via(statefulFlow(UserState0(), bs))
         .toMat(Sink.foreach { case (replies, p) ⇒ p.trySuccess(replies) })(Keep.left)
-        //.withAttributes(ActorAttributes.supervisionStrategy(akka.stream.Supervision.resumingDecider))
-        .addAttributes(ActorAttributes.supervisionStrategy(akka.stream.Supervision.resumingDecider))
+        .withAttributes(ActorAttributes.supervisionStrategy(akka.stream.Supervision.resumingDecider))
+        //.addAttributes(ActorAttributes.supervisionStrategy(akka.stream.Supervision.resumingDecider))
         .run()
 
     val f = produceOneWithinStream(queue).flatMap(_ ⇒ sys.terminate)
