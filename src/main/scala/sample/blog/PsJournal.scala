@@ -171,11 +171,20 @@ final class PsJournal(client: Cluster, keySpace: String, journal: String, persis
 
 object PsJournal {
 
-  implicit class ListenableFutureConverter[A](val lf: ListenableFuture[A]) extends AnyVal {
+  implicit class ListenableFutureConverter[A](val future: ListenableFuture[A]) extends AnyVal {
     def asFuture(implicit ec: ExecutionContext): Future[A] = {
       val promise = Promise[A]
+      future.addListener(() ⇒ {
+        //BusySpinWait
+        while (!future.isDone) {
+          java.lang.Thread.onSpinWait()
+        }
+        promise.tryComplete(Try(future.get()))
+      }, ec.asInstanceOf[Executor])
+
       //lf.addListener(() => promise.complete(Try(lf.get())), ec.asInstanceOf[Executor])
-      com.google.common.util.concurrent.Futures.addCallback(lf, new FutureCallback[A] {
+
+      /*com.google.common.util.concurrent.Futures.addCallback(lf, new FutureCallback[A] {
         def onFailure(error: Throwable): Unit = {
           promise.failure(error)
           ()
@@ -185,7 +194,7 @@ object PsJournal {
           promise.success(result)
           ()
         }
-      }, ec.asInstanceOf[Executor])
+      }, ec.asInstanceOf[Executor])*/
       promise.future
     }
   }

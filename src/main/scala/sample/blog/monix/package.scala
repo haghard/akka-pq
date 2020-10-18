@@ -1,9 +1,13 @@
 package sample.blog
 
+import java.util.concurrent.Executor
+
 import scala.concurrent.{ Future, Promise }
 import scala.language.implicitConversions
 import com.datastax.driver.core.{ PreparedStatement, Session, SimpleStatement }
 import com.google.common.util.concurrent.{ FutureCallback, Futures, ListenableFuture }
+
+import scala.util.Try
 package object monix {
 
   import scala.concurrent.{ ExecutionContext, ExecutionContextExecutorService }
@@ -29,9 +33,20 @@ package object monix {
     }
   }
 
-  implicit def asScalaFuture[T](lf: ListenableFuture[T])(implicit ec: ExecutionContext): Future[T] = {
+  implicit def asScalaFuture[T](future: ListenableFuture[T])(implicit ec: ExecutionContext): Future[T] = {
     val promise = Promise[T]()
-    com.google.common.util.concurrent.Futures.addCallback(lf, new FutureCallback[T] {
+    future.addListener(() ⇒ promise.tryComplete(Try(future.get())), ec.asInstanceOf[Executor])
+
+    /*
+    future.addListener(() => {
+      //BusySpinWaitStrategy: com.lmax.disruptor.util.ThreadHints.onSpinWait()
+      while (! future.isDone) {
+        java.lang.Thread.onSpinWait()
+      }
+      promise.tryComplete(Try(future.get()))
+    }, ec.asInstanceOf[Executor])
+    */
+    /*com.google.common.util.concurrent.Futures.addCallback(lf, new FutureCallback[T] {
       def onFailure(error: Throwable): Unit = {
         promise.failure(error)
         ()
@@ -41,7 +56,8 @@ package object monix {
         promise.success(result)
         ()
       }
-    }, ExecutionContextExecutorServiceBridge(ec))
+    }, ExecutionContextExecutorServiceBridge(ec))*/
+
     promise.future
   }
 
