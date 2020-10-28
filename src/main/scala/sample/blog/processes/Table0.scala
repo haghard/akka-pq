@@ -25,29 +25,26 @@ object Table0 {
 
   sealed trait GameTableCmd {
     def cmdId: Long
-
-    def playerId: Long
   }
 
-  final case class PlaceBet(cmdId: Long, playerId: Long, chips: Int) extends GameTableCmd
+  final case class Inc(cmdId: Long) extends GameTableCmd
 
   sealed trait GameTableEvent
-
-  final case class BetPlaced(cmdId: Long, playerId: Long, chips: Int) extends GameTableEvent
+  final case class Incremented(cmdId: Long) extends GameTableEvent
 
   sealed trait GameTableReply
+  final case class BackOff(cmd: Inc) extends GameTableReply
 
-  final case class BackOff(cmd: PlaceBet) extends GameTableReply
-
-  final case class BetPlacedReply(cmdId: Long /*, playerId: Long*/ )
+  final case class BetPlacedReply(cmdId: Long)
 
   case object Flush
 
-  final case class State(userChips: Map[Long, Int] = Map.empty)
+  //final case class State(userChips: Map[Long, Int] = Map.empty)
+  final case class State(counter: Long)
 
   final case class Persisted(cmdId: Long)
 
-  def props = Props(new Table0())
+  def props(ind: Int) = Props(new Table0(ind))
 }
 
 /**
@@ -67,7 +64,7 @@ object Table0 {
  * https://softwaremill.com/windowing-data-in-akka-streams/
  *
  */
-class Table0(waterMark: Int = 8, chipsLimitPerPlayer: Int = 50000) extends Timers with PersistentActor with ActorLogging {
+class Table0(ind: Int, waterMark: Int = 8) extends Timers with PersistentActor with ActorLogging {
 
   private val flushInterval = 2000.millis
 
@@ -76,32 +73,28 @@ class Table0(waterMark: Int = 8, chipsLimitPerPlayer: Int = 50000) extends Timer
   timers.startTimerAtFixedRate(persistenceId, Flush, flushInterval)
 
   override def receiveRecover: Receive = {
-    var map = Map[Long, Int]()
+    var counter = 0L
 
     {
-      case ev: BetPlaced ⇒
-        val chips = map.getOrElse(ev.playerId, 0)
-        map = map + (ev.playerId -> (chips + ev.chips))
+      case _: Incremented ⇒
+        counter = counter + ind
       case akka.persistence.RecoveryCompleted ⇒
-        val state = State(map)
-        log.info("RecoveryCompleted {}", state)
+        val state = State(counter)
+        log.info("{} RecoveryCompleted {}", ind, state.counter)
         context.become(active(SortedMap[Long, GameTableEvent](), state, None, Set.empty[Long]))
     }
   }
 
   override def receiveCommand: Receive =
-    active(SortedMap[Long, GameTableEvent](), State(), None, Set.empty[Long])
+    active(SortedMap[Long, GameTableEvent](), State(0L), None, Set.empty[Long])
 
   //Invariant: Number of chips per player should not exceed 100
   def update(event: GameTableEvent, state: State): State =
     event match {
-      case e: BetPlaced ⇒
-        val curChips = state.userChips.getOrElse(e.playerId, 0)
-        val updatedChips = curChips + e.chips
-        if (updatedChips < chipsLimitPerPlayer) state.copy(state.userChips.updated(e.playerId, updatedChips))
-        else state
+      case _: Incremented ⇒
+        state.copy(counter = state.counter + ind)
       case other ⇒
-        log.error(s"Unknown event ${other}")
+        log.error(s"Unknown event $other")
         state
     }
 
@@ -115,49 +108,27 @@ class Table0(waterMark: Int = 8, chipsLimitPerPlayer: Int = 50000) extends Timer
     outstandingEvents: SortedMap[Long, GameTableEvent], optimisticState: State,
     upstream: Option[ActorRef], persistInFlight: Set[Long]
   ): Receive = {
-    case cmd: PlaceBet ⇒
+    case cmd: Table0.Inc ⇒
+      log.warning("*** inc:{}", ind)
       if (outstandingEvents.keySet.size <= waterMark) {
-        //validation should be here!!
-        val ev = BetPlaced(cmd.cmdId, cmd.playerId, cmd.chips)
-        //optimistically update state before persisting events
+        val ev = Incremented(cmd.cmdId)
         val updatedState = update(ev, optimisticState)
         val outstandingEventsUpdated = outstandingEvents + (ev.cmdId -> ev)
         context become active(outstandingEventsUpdated, updatedState, Some(sender()), persistInFlight)
       } else {
         upstream.foreach(_ ! BackOff(cmd))
-        log.warning("BackOff cmd:{}  buffers[{}] - [{}]", cmd.cmdId, outstandingEvents.keySet.mkString(","), persistInFlight.mkString(","))
+        log.warning("BackOff cmd:{} buffers[{}] - [{}]", cmd.cmdId, outstandingEvents.keySet.mkString(","), persistInFlight.mkString(","))
         tryFlush(persistInFlight.size)
       }
 
-    /*
-      //validation should be here!!
-      //log.info("in {}", cmd.cmdId)
-      val ev = BetPlaced(cmd.cmdId, cmd.playerId, cmd.chips)
-      //optimistically update state before persisting events
-      val updatedState = update(ev, optimisticState)
-      val outstandingEventsUpdated = outstandingEvents + (ev.cmdId -> ev)
-
-      if (outstandingEventsUpdated.keySet.size < waterMark) {
-        context become active(outstandingEventsUpdated, updatedState, Some(sender()), bSize)
-      } else {
-        //We hope that by the time we fill up current batch the prev one has already been persisted.
-        upstream.foreach(_ ! BackOff)
-        log.warning("BackOff - buffer size: {}: outstanding p-batch:{}. Last cmd id:{}", outstandingEventsUpdated.keySet.size, bSize, cmd.cmdId)
-
-        if (bSize == 0) {
-          self ! Flush
-        }
-
-        context become active(outstandingEventsUpdated, updatedState, upstream, bSize)
-      }*/
     case Flush if outstandingEvents.nonEmpty ⇒
-      log.info("Start persisting batch [{}]", outstandingEvents.keySet.mkString(","))
+      log.info("{} Start persisting batch [{}]", ind, outstandingEvents.keySet.mkString(","))
       persistAllAsync(outstandingEvents.values.toSeq) { e ⇒
         e match {
           //calls for each persisted event
-          case e: BetPlaced ⇒
+          case e: Incremented ⇒
             // Who knows how long to sleep ¯\_(ツ)_/¯?
-            Thread.sleep(70)
+            Thread.sleep(41)
             self ! Persisted(e.cmdId)
         }
       }

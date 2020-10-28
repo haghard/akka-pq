@@ -48,27 +48,26 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-cluster-tools"                       % akkaVersion,
   "com.typesafe.akka" %% "akka-cluster-sharding"                    % akkaVersion,
   "com.typesafe.akka" %% "akka-persistence-query"                   % akkaVersion,
-  "com.typesafe.akka" %% "akka-persistence-cassandra"               % "0.103",      //"1.0.3"
+  "com.typesafe.akka" %% "akka-persistence-cassandra"               % "0.103", //"1.0.3"
 
   "com.lightbend.akka.management" %% "akka-management-cluster-http" % "1.0.8",
 
   "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
-  "ch.qos.logback" % "logback-classic" % "1.2.3",
+  "ch.qos.logback"    % "logback-classic" % "1.2.3",
 
-  "com.typesafe.akka" %% "akka-stream" % akkaVersion,
-
+  "com.typesafe.akka" %% "akka-stream"                              % akkaVersion,
 
   "io.monix" %% "monix" % "3.0.0",
 
   "com.datastax.cassandra" % "cassandra-driver-extras" % "3.7.2",
 
-
   //"com.typesafe.akka" %%  "akka-http"      % akkaHttpVersion,
-  //"org.hdrhistogram"  %   "HdrHistogram"      % "2.1.9",
+  //"org.hdrhistogram"  %   "HdrHistogram"   % "2.1.9",
+
   "com.chuusai" %% "shapeless" % "2.3.3",
 
-  "org.typelevel" %% "cats-core" % "2.2.0",
-  "org.typelevel" %% "cats-effect" % "2.2.0",
+  "org.typelevel" %% "cats-core"   %  "2.2.0",
+  "org.typelevel" %% "cats-effect" %  "2.2.0",
 
   "com.typesafe.akka" %% "akka-multi-node-testkit" % akkaVersion,
   //"net.cakesolutions" %%  "validated-config"  %  "1.1.2",
@@ -119,4 +118,5 @@ Here are some examples with variance:
 
 */
 
-//fork in run := true
+fork in run := false
+//true
