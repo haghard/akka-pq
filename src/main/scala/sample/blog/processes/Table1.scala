@@ -1,8 +1,9 @@
 package sample.blog.processes
 
-import akka.actor.{ ActorLogging, ActorRef, Timers }
+import akka.actor.{ ActorLogging, ActorRef, Props, Timers }
 import akka.persistence.{ AtLeastOnceDelivery, PersistentActor, RecoveryCompleted }
 import Table1._
+
 import scala.concurrent.duration._
 
 //https://doc.akka.io/docs/alpakka/current/avroparquet.html
@@ -29,7 +30,8 @@ object Table1 {
 
   sealed trait GameTableReply1
 
-  case object BackOff1 extends GameTableReply1
+  //negative Ack
+  case object NACK extends GameTableReply1
 
   case class BetPlacedReply1(cmdId: Long, playerId: Long)
 
@@ -38,6 +40,8 @@ object Table1 {
   case class GameTableState1(userChips: Map[Long, Int] = Map.empty)
 
   case class JournalWatermark(deliveryId: Long, acceptedEvn: BetAccepted) // PlaceBet1
+
+  def props(upstream: ActorRef): Props = Props(new Table1(upstream))
 }
 
 /**
@@ -62,7 +66,7 @@ object Table1 {
 //Invariant: Number of chips per player should not exceed 100
 //https://doc.akka.io/docs/akka/current/persistence.html
 
-//Monolith to reactive microservices: https://www.youtube.com/watch?v=pCG2Yhe3H6g
+// NACKing example - telling the Publisher to slow down (Bounded buffer + drop msgs and require re-sending)
 class Table1(upstream: ActorRef, watermark: Int = 1 << 4, chipsLimitPerPlayer: Int = 100, flushPeriod: FiniteDuration = 1.second)
   extends PersistentActor with AtLeastOnceDelivery with ActorLogging with Timers {
 
@@ -120,7 +124,7 @@ class Table1(upstream: ActorRef, watermark: Int = 1 << 4, chipsLimitPerPlayer: I
           context become active(acceptedEventsNum, outstandingEvents, optimisticState)
         }
       } else {
-        upstream ! BackOff1
+        upstream ! NACK
         self ! Flush1
       }
 

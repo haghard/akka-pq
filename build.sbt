@@ -2,11 +2,12 @@ import com.typesafe.sbt.SbtMultiJvm.MultiJvmKeys.MultiJvm
 import com.typesafe.sbt.SbtMultiJvm.multiJvmSettings
 import scalariform.formatter.preferences._
 
-val akkaVersion = "2.6.10"
+val akkaVersion = "2.6.12"
+val squbsVersion = "0.14.0"
 
 name := "akka-pq"
 version := "1.0"
-scalaVersion := "2.13.3"
+scalaVersion := "2.13.4"
 
 val root = project
   .in(file("."))
@@ -15,6 +16,7 @@ val root = project
   .settings(multiJvmSettings: _*) // apply the default settings
   .settings(
     resolvers += Resolver.sonatypeRepo("snapshots"),
+    //resolvers += Resolver.bintrayRepo("evolutiongaming", "maven"),
 
     //javacOptions in Compile ++= Seq("-Xlint:unchecked", "-Xlint:deprecation"),
     scalacOptions in Compile ++= Seq(
@@ -48,14 +50,16 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-cluster-tools"                       % akkaVersion,
   "com.typesafe.akka" %% "akka-cluster-sharding"                    % akkaVersion,
   "com.typesafe.akka" %% "akka-persistence-query"                   % akkaVersion,
-  "com.typesafe.akka" %% "akka-persistence-cassandra"               % "0.103", //"1.0.3"
+  "com.typesafe.akka" %% "akka-persistence-cassandra"               % "0.103", //"1.0.4"
 
-  "com.lightbend.akka.management" %% "akka-management-cluster-http" % "1.0.8",
+  "com.lightbend.akka.management" %% "akka-management-cluster-http" % "1.0.9",
 
   "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
   "ch.qos.logback"    % "logback-classic" % "1.2.3",
 
-  "com.typesafe.akka" %% "akka-stream"                              % akkaVersion,
+  //"com.typesafe.akka" %% "akka-stream"                              % akkaVersion,
+  "com.typesafe.akka" %% "akka-actor-typed"                         % akkaVersion,
+  "com.typesafe.akka" %% "akka-stream-typed"                        % akkaVersion,
 
   "io.monix" %% "monix" % "3.0.0",
 
@@ -77,10 +81,19 @@ libraryDependencies ++= Seq(
 
   //"com.slamdata" %% "matryoshka-core" % "0.21.3",
 
+  //https://github.com/evolution-gaming/throttler/blob/master/src/test/scala/com/evolutiongaming/util/throttler/RequestThrottlerSpec.scala
+  //"com.evolutiongaming" %% "throttler" % "2.0.1",
+
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
+  
+  //squbs
+  //https://squbs.readthedocs.io/en/latest/presentations/
+  "org.squbs" %% "squbs-pattern" % squbsVersion,  //excludeAll("com.typesafe.akka")
 
-  ("com.lihaoyi" % "ammonite" % "2.2.0" % "test").cross(CrossVersion.full),
+  "org.squbs" %% "squbs-ext"     % squbsVersion,  //.excludeAll("com.typesafe.akka")
+
+  ("com.lihaoyi" % "ammonite" % "2.3.8-32-64308dc3" % "test").cross(CrossVersion.full),
 
   "org.iq80.leveldb" % "leveldb" % "0.7" % "test",
   "org.fusesource.leveldbjni" % "leveldbjni-all" % "1.8" % "test",

@@ -2,7 +2,6 @@ package sample.blog.processes
 
 import akka.actor.{ ActorLogging, ActorRef, Props, Timers }
 import akka.persistence.PersistentActor
-import akka.stream.scaladsl.RestartWithBackoffFlow
 import sample.blog.processes.Table0._
 
 import scala.collection.immutable.SortedMap
@@ -64,7 +63,7 @@ object Table0 {
  * https://softwaremill.com/windowing-data-in-akka-streams/
  *
  */
-class Table0(ind: Int, waterMark: Int = 8) extends Timers with PersistentActor with ActorLogging {
+class Table0(ind: Int, waterMark: Int = 8) extends Timers with PersistentActor with ActorLogging /*with ActorSubscriber*/ {
 
   private val flushInterval = 2000.millis
 

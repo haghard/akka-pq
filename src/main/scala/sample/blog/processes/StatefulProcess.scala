@@ -1,13 +1,12 @@
 package sample.blog.eg
 
 import java.util.concurrent.ThreadLocalRandom
-
 import akka.Done
 import akka.actor.{ ActorSystem, Scheduler }
 import akka.stream.QueueOfferResult.{ Dropped, Enqueued }
-import akka.stream.scaladsl.{ Flow, FlowWithContext, Keep, Sink, Source, SourceQueueWithComplete }
+import akka.stream.scaladsl.{ Flow, FlowWithContext, Keep, Sink, Source, SourceQueueWithComplete, SourceWithContext }
 import akka.stream.{ ActorAttributes, Attributes, OverflowStrategy, QueueOfferResult, ThrottleMode }
-import sample.blog.processes.{ EventBuffer, ExpiringPromise }
+import sample.blog.processes.{ EventBuffer, ExpiringPromise, RingBuffer }
 
 import scala.collection.immutable
 import scala.concurrent.duration._
@@ -391,6 +390,14 @@ object StatefulProcess {
     implicit val sys: ActorSystem = ActorSystem("stateful-streams")
     implicit val sch = sys.scheduler
     implicit val ec = sys.dispatcher
+
+    //https://blog.softwaremill.com/painlessly-passing-message-context-through-akka-streams-1615b11efc2c
+    //SourceWithContext.fromTuples(Source.queue[(Cmd, Promise[Reply])](bs))
+    Source.queue[(Cmd, Promise[Reply])](bs)
+      .via(statefulFlow(UserState0(), bs))
+      .toMat(Sink.foreach { case (replies, p) ⇒ p.trySuccess(replies) })(Keep.left)
+      .withAttributes(ActorAttributes.supervisionStrategy(akka.stream.Supervision.resumingDecider))
+      .run()
 
     val queue =
       Source

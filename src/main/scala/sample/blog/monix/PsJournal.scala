@@ -137,7 +137,7 @@ object PsJournal {
     //https://docs.datastax.com/en/developer/java-driver/3.4/manual/query_timestamps/
     val cluster = new Cluster.Builder()
       .addContactPoints(InetAddress.getByName("192.168.77.42"))
-      //.withTimestampGenerator(new AtomicMonotonicTimestampGenerator())  //give us RYW consistency, latest versions of driver does it
+      .withTimestampGenerator(new AtomicMonotonicTimestampGenerator()) //give us RYW consistency, latest versions of driver does it
       .withPort(9042)
       .build()
 

@@ -1,4 +1,4 @@
-package sample.blog.eg
+package sample.blog.processes
 
 import scala.reflect.ClassTag
 

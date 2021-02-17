@@ -13,6 +13,7 @@ object TableAppActor {
 class TableAppActor(ind: Int) extends Actor with ActorLogging {
 
   val gt = context.actorOf(Table0.props(ind), "gt")
+
   val source = context.actorOf(TableWriter.props(gt), "src")
 
   override val supervisorStrategy = OneForOneStrategy(maxNrOfRetries  = 10, withinTimeRange = 15.seconds) {
