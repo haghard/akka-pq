@@ -7,14 +7,18 @@ class Node[T, U](var prev: Node[T, U] = null, var next: Node[T, U] = null,
 }
 
 object LRUCache {
+
   def apply[K, V](capacity: Int) = {
     val empty = new Node[K, V]()
     new LRUCache(capacity, new java.util.HashMap[K, Node[K, V]], empty, empty)
   }
 }
 
-class LRUCache[K, V] private(capacity: Int, cache: java.util.HashMap[K, Node[K, V]],
-  var lru: Node[K, V], var mru: Node[K, V]) {
+final class LRUCache[K, V] private(
+  capacity: Int,
+  cache: java.util.HashMap[K, Node[K, V]],
+  var lru: Node[K, V], var mru: Node[K, V]
+) {
 
   private var currentSize: Int = 0
 

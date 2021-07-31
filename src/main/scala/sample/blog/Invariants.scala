@@ -161,7 +161,7 @@ object Invariants {
 
     println("**************")
 
-    //The whole pipeline stops if an error occurs
+    //The whole pipeline stops when first error occurs
     val out =
       for {
         a ← Precondition.ignorable[ExistedId, Option].input(None /*Some(103L)*/ , Set(103L, 4L, 78L, 32L, 8L, 1L))

@@ -2,12 +2,12 @@ import com.typesafe.sbt.SbtMultiJvm.MultiJvmKeys.MultiJvm
 import com.typesafe.sbt.SbtMultiJvm.multiJvmSettings
 import scalariform.formatter.preferences._
 
-val akkaVersion = "2.6.12"
+val akkaVersion = "2.6.15"
 val squbsVersion = "0.14.0"
 
 name := "akka-pq"
 version := "1.0"
-scalaVersion := "2.13.4"
+scalaVersion := "2.13.6"
 
 val root = project
   .in(file("."))
@@ -63,7 +63,7 @@ libraryDependencies ++= Seq(
 
   "io.monix" %% "monix" % "3.0.0",
 
-  "com.datastax.cassandra" % "cassandra-driver-extras" % "3.7.2",
+  "com.datastax.cassandra" % "cassandra-driver-extras" % "3.10.2",
 
   //"com.typesafe.akka" %%  "akka-http"      % akkaHttpVersion,
   //"org.hdrhistogram"  %   "HdrHistogram"   % "2.1.9",
@@ -93,12 +93,18 @@ libraryDependencies ++= Seq(
 
   "org.squbs" %% "squbs-ext"     % squbsVersion,  //.excludeAll("com.typesafe.akka")
 
-  ("com.lihaoyi" % "ammonite" % "2.3.8-32-64308dc3" % "test").cross(CrossVersion.full),
+  //https://docs.scala-lang.org/overviews/parallel-collections/overview.html
+  "org.scala-lang.modules" %% "scala-parallel-collections" % "1.0.0",
+
+
+  //("com.lihaoyi" % "ammonite" % "2.3.8-32-64308dc3" % "test").cross(CrossVersion.full),
+  "com.lihaoyi" % "ammonite" % "2.3.8-124-2da846d2" % "test" cross CrossVersion.full,
 
   "org.iq80.leveldb" % "leveldb" % "0.7" % "test",
   "org.fusesource.leveldbjni" % "leveldbjni-all" % "1.8" % "test",
   "org.scalatest" %% "scalatest" % "3.0.8" % "test",
-  "commons-io" % "commons-io" % "2.4" % "test")
+  "commons-io" % "commons-io" % "2.4" % "test"
+)
 
 // ammonite repl
 // test:run

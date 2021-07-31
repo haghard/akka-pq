@@ -83,10 +83,8 @@ object MessageProcessor {
  Kafka manages offsets. Microservice commits once the message is saved in its journal.
  Processing of messages happens from the microservice's journal.
 
- As soon as we have a message we persist it to the local journal,
- so that if we  crush can recover and never forget the messages we had received.
-
- The local journal act as a buffer.
+ As soon as we have a message we persist it to the local journal, so that if we crush we can recover and never forget the messages we had received.
+ The local journal acts as a buffer.
 
 */
 class MessageProcessor extends PersistentActor with AtLeastOnceDelivery with ActorLogging {

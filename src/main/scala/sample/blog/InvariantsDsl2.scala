@@ -10,15 +10,15 @@ object InvariantsDsl2 {
 
   trait Ops[F[_]] {
 
+    def and[A, B](a: F[R], b: F[R]): F[R]
+
+    def or[A, B](a: F[R], b: F[R]): F[R]
+
     def inSet[T](in: T, state: Set[T], msg: String): F[R]
 
     def notInSet[T](in: T, state: Set[T], msg: String): F[R]
 
     def inMap[T](in: T, state: Map[T, _], msg: String): F[R]
-
-    def and[A, B](a: F[R], b: F[R]): F[R]
-
-    def or[A, B](a: F[R], b: F[R]): F[R]
 
   }
 
