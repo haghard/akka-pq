@@ -109,8 +109,10 @@ class Table4 extends PersistentActor with ActorLogging {
       } else {
         maybeLast = Some(msg)
       }
+
     case SinkCompleted ⇒
       context.stop(self)
+
     case Failed(cause) ⇒
       log.error(s"Table has been stopped because of the error in the downstream", cause)
       context.stop(self)

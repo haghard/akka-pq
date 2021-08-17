@@ -162,7 +162,7 @@ object StatefulProcess {
     }
 
     //1. `mapAsync` fan-out stage that introduces asynchrony
-    //2. `scan` foreach cmd we sequentially apply f(state, cmd) => (state, promise)
+    //2. `scan` foreach cmd we sequentially applies f(state, cmd) => (state, promise)
     //3. `mapAsync(1)` persist state resulted from applying one event
     val f = Flow.fromMaterializer { (mat, attr) ⇒
       val ec = mat.executionContext

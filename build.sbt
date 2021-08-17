@@ -2,12 +2,12 @@ import com.typesafe.sbt.SbtMultiJvm.MultiJvmKeys.MultiJvm
 import com.typesafe.sbt.SbtMultiJvm.multiJvmSettings
 import scalariform.formatter.preferences._
 
-val akkaVersion = "2.6.12"
+val akkaVersion = "2.6.15"
 val squbsVersion = "0.14.0"
 
 name := "akka-pq"
 version := "1.0"
-scalaVersion := "2.13.4"
+scalaVersion := "2.13.6"
 
 val root = project
   .in(file("."))
@@ -19,7 +19,7 @@ val root = project
     //resolvers += Resolver.bintrayRepo("evolutiongaming", "maven"),
 
     //javacOptions in Compile ++= Seq("-Xlint:unchecked", "-Xlint:deprecation"),
-    scalacOptions in Compile ++= Seq(
+    Compile / scalacOptions ++= Seq(
       //"-deprecation",
       //"-feature",
       //"-unchecked",
@@ -30,7 +30,7 @@ val root = project
     ),
 
     // disable parallel tests
-    parallelExecution in Test := false,
+    Test / parallelExecution := false,
 
     logLevel := Level.Info,
     //logLevel := Level.Debug,
@@ -38,10 +38,9 @@ val root = project
     //multiNodeTest - remote run
     //multi-node-test
     //multi-jvm:test - local run
-    multiNodeHosts in MultiJvm :=
-      Seq("haghard@192.168.77.83", "haghard@192.168.77.69", "haghard@192.168.77.10"),
+    MultiJvm / multiNodeHosts := Seq("haghard@192.168.77.83", "haghard@192.168.77.69", "haghard@192.168.77.10"),
 
-    fork in run := false,
+    run / fork := false,
     javaOptions ++= Seq("-Xmx3G", "-XX:MaxMetaspaceSize=2G", "-XX:+UseG1GC")
   )
 
@@ -63,7 +62,7 @@ libraryDependencies ++= Seq(
 
   "io.monix" %% "monix" % "3.0.0",
 
-  "com.datastax.cassandra" % "cassandra-driver-extras" % "3.7.2",
+  "com.datastax.cassandra" % "cassandra-driver-extras" % "3.10.2",
 
   //"com.typesafe.akka" %%  "akka-http"      % akkaHttpVersion,
   //"org.hdrhistogram"  %   "HdrHistogram"   % "2.1.9",
@@ -93,7 +92,10 @@ libraryDependencies ++= Seq(
 
   "org.squbs" %% "squbs-ext"     % squbsVersion,  //.excludeAll("com.typesafe.akka")
 
-  ("com.lihaoyi" % "ammonite" % "2.3.8-32-64308dc3" % "test").cross(CrossVersion.full),
+  //https://docs.scala-lang.org/overviews/parallel-collections/overview.html
+  "org.scala-lang.modules" %% "scala-parallel-collections" % "1.0.0",
+
+  ("com.lihaoyi" % "ammonite" % "2.4.0" % "test").cross(CrossVersion.full),
 
   "org.iq80.leveldb" % "leveldb" % "0.7" % "test",
   "org.fusesource.leveldbjni" % "leveldbjni-all" % "1.8" % "test",
@@ -102,8 +104,8 @@ libraryDependencies ++= Seq(
 
 // ammonite repl
 // test:run
-sourceGenerators in Test += Def.task {
-  val file = (sourceManaged in Test).value / "amm.scala"
+Test / sourceGenerators += Def.task {
+  val file = (Test / sourceManaged).value / "amm.scala"
   IO.write(file, """object amm extends App { ammonite.Main().run() }""")
   Seq(file)
 }.taskValue
@@ -131,5 +133,5 @@ Here are some examples with variance:
 
 */
 
-fork in run := false
+run / fork := false
 //true
