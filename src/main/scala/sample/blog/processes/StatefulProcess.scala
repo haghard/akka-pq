@@ -393,7 +393,8 @@ object StatefulProcess {
 
     //https://blog.softwaremill.com/painlessly-passing-message-context-through-akka-streams-1615b11efc2c
     //SourceWithContext.fromTuples(Source.queue[(Cmd, Promise[Reply])](bs))
-    Source.queue[(Cmd, Promise[Reply])](bs)
+    Source
+      .queue[(Cmd, Promise[Reply])](bs)
       .via(statefulFlow(UserState0(), bs))
       .toMat(Sink.foreach { case (replies, p) ⇒ p.trySuccess(replies) })(Keep.left)
       .withAttributes(ActorAttributes.supervisionStrategy(akka.stream.Supervision.resumingDecider))

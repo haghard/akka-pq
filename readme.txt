@@ -2,7 +2,7 @@
   You can use Cluster Sharding and DData with roles. So, let's say that you go with 10 roles, 10,000 entities in each role.
   You would then start Replicators on the nodes with corresponding roles.
   You would also start Sharding on the nodes with corresponding roles.
-  On a node that doesn't have the a role you would start a sharding proxy for such role.
+  On a node that doesn't have the role you would start a sharding proxy for such role.
 
   When you want to send a message to an entity you first need to decide which role to use for that message.
   Can be simple hashCode modulo algorithm.

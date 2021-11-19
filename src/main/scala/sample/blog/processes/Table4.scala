@@ -4,6 +4,7 @@ import Table4._
 import akka.actor.typed.ActorRef
 import akka.actor.{ ActorLogging, Props }
 import akka.persistence.PersistentActor
+import akka.stream.Attributes
 
 object Table4 {
 
@@ -32,6 +33,7 @@ object Table4 {
       Table4.Init(_),
       Table4.SinkCompleted,
       Table4.Failed(_))
+  //.withAttributes(Attributes.inputBuffer(watermark, watermark))
 
   def props() = Props(new Table4)
 }
@@ -72,8 +74,7 @@ class Table4 extends PersistentActor with ActorLogging {
 
   var maybeLast: Option[Next] = None
 
-  def enoughSpace: Boolean =
-    inFlight < watermark
+  def enoughSpace: Boolean = inFlight < watermark
 
   //def isFull: Boolean = inFlight == watermark
 

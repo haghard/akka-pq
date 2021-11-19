@@ -162,7 +162,7 @@ final class PsJournal(client: Cluster, keySpace: String, journal: String, persis
         }
       }
 
-      override def postStop: Unit = {
+      override def postStop(): Unit = {
         //cleaning up resources should be done here
         //session.closeAsync
       }

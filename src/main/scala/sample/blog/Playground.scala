@@ -25,8 +25,7 @@ object Playground {
   aa + bb
   */
 
-  sealed trait Money[A <: Money[A]] {
-    self ⇒
+  sealed trait Money[A <: Money[A]] { self ⇒
     def amount: BigDecimal
 
     def +(that: A): A
