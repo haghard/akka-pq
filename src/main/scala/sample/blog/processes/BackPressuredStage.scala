@@ -64,6 +64,11 @@ final class BackPressuredStage[A](watermark: Int) extends GraphStage[FlowShape[A
         .getOrElse(Supervision.stoppingDecider)
 
       var isDownstreamRequested = false
+
+      //ActorRefBackpressureSinkStage uses `ArrayDeque` as an internal buffer
+      //An implementation of a double-ended queue that internally uses a resizable circular buffer.
+      //val fifo0: java.util.Deque[A] = new java.util.ArrayDeque[A]()
+
       val fifo = mutable.Queue[A]()
 
       private def enoughSpace: Boolean =
@@ -82,6 +87,7 @@ final class BackPressuredStage[A](watermark: Int) extends GraphStage[FlowShape[A
           override def onPush(): Unit = {
             val elem = grab(in)
             fifo enqueue elem //O(1)
+            //fifo0.offer(elem)
 
             //Can't keep up with req rate!
             //if (fifo.size > 1) log.debug("{} Buffering: {}", Thread.currentThread.getName, fifo.size)
@@ -89,6 +95,7 @@ final class BackPressuredStage[A](watermark: Int) extends GraphStage[FlowShape[A
             if (isDownstreamRequested) {
               isDownstreamRequested = false
               val elem = fifo.dequeue
+              //val elem = fifo0.poll()
               push(out, elem)
             }
 
@@ -97,9 +104,12 @@ final class BackPressuredStage[A](watermark: Int) extends GraphStage[FlowShape[A
           }
 
           override def onUpstreamFinish(): Unit = {
-            if (fifo.nonEmpty)
+            if (fifo.nonEmpty) {
+              //emitMultiple(out, fifo0.iterator())
+
               // emit the rest if possible
               emitMultiple(out, fifo.iterator)
+            }
             completeStage()
           }
         }
