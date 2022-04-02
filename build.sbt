@@ -2,8 +2,8 @@ import com.typesafe.sbt.SbtMultiJvm.MultiJvmKeys.MultiJvm
 import com.typesafe.sbt.SbtMultiJvm.multiJvmSettings
 import scalariform.formatter.preferences._
 
-val akkaVersion = "2.6.17"
-val squbsVersion = "0.14.0"
+val akkaVersion = "2.6.19"
+val squbsVersion = "0.15.0"
 
 name := "akka-pq"
 version := "1.0"
@@ -16,7 +16,6 @@ val root = project
   .settings(multiJvmSettings: _*) // apply the default settings
   .settings(
     resolvers += Resolver.sonatypeRepo("snapshots"),
-    //resolvers += Resolver.bintrayRepo("evolutiongaming", "maven"),
 
     //javacOptions in Compile ++= Seq("-Xlint:unchecked", "-Xlint:deprecation"),
     Compile / scalacOptions ++= Seq(
@@ -51,10 +50,10 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-persistence-query"                   % akkaVersion,
   "com.typesafe.akka" %% "akka-persistence-cassandra"               % "0.103", //"1.0.4"
 
-  "com.lightbend.akka.management" %% "akka-management-cluster-http" % "1.0.9",
+  "com.lightbend.akka.management" %% "akka-management-cluster-http" % "1.1.3",
 
   "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
-  "ch.qos.logback"    % "logback-classic" % "1.2.3",
+  "ch.qos.logback"    % "logback-classic" % "1.2.11",
 
   //"com.typesafe.akka" %% "akka-stream"                              % akkaVersion,
   "com.typesafe.akka" %% "akka-actor-typed"                         % akkaVersion,
@@ -83,8 +82,8 @@ libraryDependencies ++= Seq(
   //https://github.com/evolution-gaming/throttler/blob/master/src/test/scala/com/evolutiongaming/util/throttler/RequestThrottlerSpec.scala
   //"com.evolutiongaming" %% "throttler" % "2.0.1",
 
-  "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
+  "ch.qos.logback" % "logback-classic" % "1.2.11",
+  "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4",
   
   //squbs
   //https://squbs.readthedocs.io/en/latest/presentations/
@@ -93,9 +92,9 @@ libraryDependencies ++= Seq(
   "org.squbs" %% "squbs-ext"     % squbsVersion,  //.excludeAll("com.typesafe.akka")
 
   //https://docs.scala-lang.org/overviews/parallel-collections/overview.html
-  "org.scala-lang.modules" %% "scala-parallel-collections" % "1.0.0",
+  "org.scala-lang.modules" %% "scala-parallel-collections" % "1.0.4",
 
-  ("com.lihaoyi" % "ammonite" % "2.4.0" % "test").cross(CrossVersion.full),
+  ("com.lihaoyi" % "ammonite" % "2.5.2" % "test").cross(CrossVersion.full),
 
   "org.iq80.leveldb" % "leveldb" % "0.7" % "test",
   "org.fusesource.leveldbjni" % "leveldbjni-all" % "1.8" % "test",
@@ -120,16 +119,16 @@ scalariformPreferences := scalariformPreferences.value
 scalariformAutoformat := true
 scalariformWithBaseDirectory := true
 
-addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3")
 
+addCompilerPlugin("org.typelevel" % "kind-projector" % "0.13.2" cross CrossVersion.full)
 
 /*
 
 Here are some examples with variance:
-  Tuple2[?, Double]        // equivalent to: type R[A] = Tuple2[A, Double]
-  Either[Int, +?]          // equivalent to: type R[+A] = Either[Int, A]
-  Function2[-?, Long, +?]  // equivalent to: type R[-A, +B] = Function2[A, Long, B]
-  EitherT[?[_], Int, ?]    // equivalent to: type R[F[_], B] = EitherT[F, Int, B]
+  Tuple2[*, Double]        // equivalent to: type R[A] = Tuple2[A, Double]
+  Either[Int, +*]          // equivalent to: type R[+A] = Either[Int, A]
+  Function2[-*, Long, +*]  // equivalent to: type R[-A, +B] = Function2[A, Long, B]
+  EitherT[*[_], Int, *]    // equivalent to: type R[F[_], B] = EitherT[F, Int, B]
 
 */
 
