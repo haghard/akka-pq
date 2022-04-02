@@ -217,19 +217,21 @@ object PsJournal {
     }
   }
 
-  def apply[T: Codec: ClassTag](client: Cluster, keySpace: String, journal: String, persistenceId: String,
-    offset: Long, partitionSize: Long, pageSize: Int = 32) = {
+  def apply[T: Codec: ClassTag](
+    client: Cluster, keySpace: String, journal: String, persistenceId: String,
+    offset: Long, partitionSize: Long, pageSize: Int = 32
+  ) =
     Source.fromGraph(new PsJournal(client, keySpace, journal, persistenceId, offset, partitionSize, pageSize))
       .map(_.as[T])
       .viaMat(new LastSeen)(Keep.right)
-  }
 
-  def typedRow(client: Cluster, keySpace: String, journal: String, persistenceId: String,
-    offset: Long, partitionSize: Long, pageSize: Int = 32) = {
+  def typedRow(
+    client: Cluster, keySpace: String, journal: String, persistenceId: String,
+    offset: Long, partitionSize: Long, pageSize: Int = 32
+  ) =
     Source.fromGraph(new PsJournal(client, keySpace, journal, persistenceId, offset, partitionSize, pageSize))
       .map(_.asTypedRow)
       .viaMat(new LastSeen)(Keep.right)
-  }
 
   final class LastSeen[T] extends GraphStageWithMaterializedValue[FlowShape[T, T], Future[Option[T]]] {
     override val shape = FlowShape(Inlet[T]("in"), Outlet[T]("out"))

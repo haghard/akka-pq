@@ -23,7 +23,7 @@ object Invariants2 {
       this match {
         case Pure(func) ⇒ func(a)
         case And(left, right) ⇒
-          cats.Apply[Validated[E, ?]].map2(left(a), right(a))((b, c) ⇒ a)
+          cats.Apply[Validated[E, *]].map2(left(a), right(a))((b, c) ⇒ a)
         //(left(a), right(a)).mapN { _ /*(_, _)*/ => a }
         case Or(left, right) ⇒
           left(a) match {
